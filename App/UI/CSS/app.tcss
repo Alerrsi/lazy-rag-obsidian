@@ -1,0 +1,26 @@
+
+
+
+#header {
+    align: center middle;
+    padding: 1;
+    height: 15%;
+    border: solid white;
+
+}
+
+#home {
+    height: 1fr;
+    width: 100%;
+    color: black;
+    padding: 1;
+    border: solid white;
+
+
+}
+
+#home-bar {
+    height: 20%;
+    border: solid white;
+}
+
