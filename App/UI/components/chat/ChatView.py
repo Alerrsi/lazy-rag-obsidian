@@ -1,7 +1,7 @@
 from textual.app import ComposeResult
 from textual.widget import Widget
 from textual.containers import Vertical
-from textual.widgets import Static, Label
+from textual.widgets import Static, Label, RichLog
 
 class ChatView(Widget):
 
@@ -22,3 +22,6 @@ class ChatView(Widget):
     def compose(self) -> ComposeResult:
         with Vertical(id="big-chat"):
             yield Label("Caja de para ver chat")
+            yield RichLog()
+
+    

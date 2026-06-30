@@ -1,8 +1,7 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Welcome, Input, Label, DataTable
+from textual.widgets import Welcome, Input, Label, DataTable, RichLog
 from textual.containers import Vertical, Horizontal
 from textual import events
-from random import randint
 
 
 from components.prompt.SearchBarView import SearchBarView
@@ -25,7 +24,7 @@ class Myapp(App):
 
 
 
-# run de lazy app
+# run de TUI app
 if __name__ == "__main__":
     app = Myapp()
     app.run()

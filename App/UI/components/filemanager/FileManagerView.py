@@ -1,6 +1,7 @@
 from textual.widget import Widget
 from textual.containers import Vertical
-from textual.widgets import Label
+from textual.widgets import Label, DirectoryTree
+from os import listdir
 
 
 
@@ -26,6 +27,5 @@ class FileManagerView(Widget):
     """
     def compose(self):
         with Vertical(id="big-files"):
-            yield Label("Caja de archivos para ver md")
-            
+            yield DirectoryTree(path="/home/alerrsi/Documents")
         
