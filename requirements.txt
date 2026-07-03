@@ -1,5 +1,5 @@
 langchain
 textual
 textual-dev
-
 ollama
+chromadb
