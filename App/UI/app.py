@@ -4,9 +4,9 @@ from textual.containers import Vertical, Horizontal
 from textual import events
 
 
-from components.prompt.SearchBarView import SearchBarView
-from components.filemanager.FileManagerView import FileManagerView
-from components.chat.ChatView import ChatView
+from .components.prompt.SearchBarView import SearchBarView
+from .components.filemanager.FileManagerView import FileManagerView
+from .components.chat.ChatView import ChatView
 
 
 class Myapp(App):
