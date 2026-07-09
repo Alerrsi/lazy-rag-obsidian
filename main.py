@@ -1,5 +1,4 @@
 from App.UI.app import Myapp
-
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from App.RAG.VectorialTrasnfer import VectorialTrasnfer
