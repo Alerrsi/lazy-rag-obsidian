@@ -1,15 +1,17 @@
-from langchain_community.document_loaders import ObsidianLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import ObsidianLoader
+from langchain_community.embeddings import OllamaEmbeddings
+from langchain_community.vectorstores import Chroma
+
+
 
 
 
 class VectorialTrasnfer():
-    OBSIDIAN_PATH = "/home/alerrsi/Documents/Obsidian/obsidian-notes"
-    DATABASE = "../App/DB"
+    OBSIDIAN_PATH = "/home/alerrsi/Documents/Obsidian/"
+    DATABASE = "./App/DB/Chroma/"
 
 
     def __init__(self):
@@ -26,23 +28,34 @@ class VectorialTrasnfer():
         # definimos la cantidad de caracteres por chunk que son 1000
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
-            chunk_overlap=200 
+            chunk_overlap=200
         )
         # Aplicamos la división a los documentos
         splits = self.text_splitter.split_documents(docs)
 
-        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    
+        for i in splits:
+            print("Split 1")
+            print(i)
+
+        print(splits)
+
+        embedding = OllamaEmbeddings(model="nomic-embed-text")
+
+
         self.vectorstore = Chroma.from_documents(
-            documents=splits, 
-            embedding=embeddings, 
+            documents=splits,
+            embedding=embedding,
             persist_directory=self.DATABASE,
-            collection_name="notas"
+            collection_name="Notas",
+            collection_metadata={'hnsw:space': 'cosine'}
         )
 
-    
+
+
     def add():
         pass
 
 
+
+vector = VectorialTrasnfer()
