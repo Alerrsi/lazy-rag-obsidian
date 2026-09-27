@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Sidebar — vault tree.
+   Fixed-width well next to the 1fr conversation, dropped when there is no
+   room for it to be readable.
+   ========================================================================== */
+
+#sidebar {
+    width: 34;
+    min-width: 0;
+    max-width: 40%;
+    height: 1fr;
+    background: $surface;
+    color: $ink;
+    border: round $line;
+    border-title-color: $ink-faint;
+    border-title-style: none;
+    padding: 0 1;
+}
+
+#vault-tree {
+    width: 100%;
+    height: 1fr;
+    background: $surface;
+    color: $ink-dim;
+    padding: 0;
+}
+
+#vault-tree:focus {
+    color: $ink;
+}
+
+/* Folders read as structure, files as content. */
+#vault-tree > .directory-tree--folder {
+    color: $ink;
+    text-style: bold;
+}
+
+#vault-tree > .directory-tree--file {
+    color: $ink-dim;
+    text-style: none;
+}
+
+#vault-tree > .tree--guides {
+    color: $line-strong;
+    background: transparent;
+}
+
+#vault-tree > .tree--highlight,
+#vault-tree > .tree--highlight-line {
+    color: $ink;
+    text-style: bold;
+}
+
+/* Cursor only lights up while the tree actually has focus. */
+#vault-tree:focus > .tree--cursor {
+    background: $primary 30%;
+    color: $text;
+    text-style: bold;
+}
+
+#vault-tree > .tree--cursor {
+    color: $ink;
+    text-style: bold;
+}
+
+#sidebar:focus-within {
+    border: round $line-strong;
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+#main.compact #sidebar {
+    width: 26;
+    max-width: 34%;
+}
+
+#main.narrow #sidebar {
+    display: none;
+}

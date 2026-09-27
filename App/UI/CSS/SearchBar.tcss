@@ -1,0 +1,68 @@
+/* ==========================================================================
+   Prompt — the one element you always interact with, so it carries the
+   accent and the only focus ring in the app.
+   ========================================================================== */
+
+#search-bar {
+    width: 100%;
+    height: 100%;
+    layout: horizontal;
+    align: left middle;
+    background: $panel;
+    color: $ink;
+    border: round $line-strong;
+    border-title-color: $brand;
+    border-title-style: none;
+    padding: 0 1;
+}
+
+#search-bar:focus-within {
+    border: round $brand;
+}
+
+#prompt-caret {
+    width: auto;
+    height: 1;
+    color: $brand;
+    text-style: bold;
+    margin-right: 1;
+}
+
+#message {
+    width: 1fr;
+    height: 1;
+    border: none;
+    background: transparent;
+    color: $ink;
+    padding: 0;
+}
+
+/* The frame is the container's job, so the input itself drops its border and
+   its focus tint: the brand ring above is the whole focus affordance. */
+#message:focus {
+    border: none;
+    background: transparent;
+    background-tint: transparent;
+}
+
+#message > .input--placeholder {
+    color: $ink-faint;
+    text-style: none;
+}
+
+#message > .input--selection {
+    background: $primary 35%;
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+/* One bare row: the accent is carried by the background block and the caret,
+   so the prompt never costs more than a single line of the conversation. */
+#main.short #search-bar {
+    border: none;
+    padding: 0 1;
+}
+
+#main.micro #prompt-caret {
+    display: none;
+}

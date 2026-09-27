@@ -1,31 +1,14 @@
 from textual.widget import Widget
-from textual.containers import Vertical
-from textual.widgets import Label, DirectoryTree
-from os import listdir
+from textual.widgets import DirectoryTree
 
-
+VAULT_ROOT = "/home/alerrsi/Documents"
 
 
 class FileManagerView(Widget):
 
-    DEFAULT_CSS = """
-    FilemanagerView {
-    width: 30%;
-    height: 1fr;
-    color: white;
-    background: green;
-    
-    }
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.border_title = "ARCHIVOS"
 
-    #big-files {
-    color: white;
-    
-    border: solid white;
-    width: 30%;
-    height: 1fr;
-    }
-    """
     def compose(self):
-        with Vertical(id="big-files"):
-            yield DirectoryTree(path="/home/alerrsi/Documents")
-        
+        yield DirectoryTree(path=VAULT_ROOT, id="vault-tree")

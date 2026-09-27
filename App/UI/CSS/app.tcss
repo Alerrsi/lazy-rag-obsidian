@@ -1,26 +1,154 @@
+/* ==========================================================================
+   Lazy Obsidian — shell
+   Three zones: header, body (chat + sidebar), prompt.
 
+   Sizing rules: fluid = 1fr, chrome = fixed cells, never percentages, which
+   round to nothing on small terminals and overflow on large ones.
 
+   Responsive rules are driven by classes that App._apply_layout_mode sets from
+   the live terminal size: compact, narrow, micro (width) and short, tiny
+   (height). Textual CSS has no media queries, so the breakpoints live in code.
+   ========================================================================== */
+
+Screen {
+    background: $background;
+    color: $ink;
+    layout: vertical;
+    margin: 0;
+}
+
+/* --- Shell --------------------------------------------------------------- */
+
+#main {
+    width: 100%;
+    height: 100%;
+    layout: vertical;
+}
+
+/* --- Header -------------------------------------------------------------- */
 
 #header {
-    align: center middle;
-    padding: 1;
-    height: 15%;
-    border: solid white;
-
+    width: 100%;
+    height: 1;
+    background: $panel;
+    color: $ink;
+    border-left: thick $brand;
+    padding: 0 1;
+    layout: horizontal;
+    align: left middle;
 }
+
+#brand {
+    width: auto;
+    height: 1;
+    color: $brand-bright;
+    text-style: bold;
+}
+
+#tagline {
+    width: 1fr;
+    height: 1;
+    color: $ink-faint;
+    padding: 0 2;
+    text-style: none;
+}
+
+#key-hints {
+    width: auto;
+    height: 1;
+    color: $ink-faint;
+    dock: right;
+    text-align: right;
+}
+
+/* --- Body ---------------------------------------------------------------- */
 
 #home {
-    height: 1fr;
     width: 100%;
-    color: black;
-    padding: 1;
-    border: solid white;
-
-
+    height: 1fr;
+    padding: 1 1 0 1;
+    layout: horizontal;
 }
+
+/* --- Prompt zone --------------------------------------------------------- */
 
 #home-bar {
-    height: 20%;
-    border: solid white;
+    width: 100%;
+    height: 3;
+    margin: 1 1 0 1;
+    background: $background;
 }
 
+/* --- Scrollbars ---------------------------------------------------------- */
+
+* {
+    scrollbar-size-vertical: 1;
+    scrollbar-size-horizontal: 1;
+    scrollbar-background: $background;
+    scrollbar-background-hover: $background;
+    scrollbar-background-active: $background;
+    scrollbar-color: $line-strong;
+    scrollbar-color-hover: $brand;
+    scrollbar-color-active: $brand-bright;
+    scrollbar-corner-color: $background;
+}
+
+/* --- Focus --------------------------------------------------------------- */
+
+/* Keep focus from also flipping text weight: the only focus ring in the app
+   is the one around the prompt. */
+*:focus {
+    text-style: none;
+}
+
+/* --- Responsive: compact (width < 104) ------------------------------------ */
+
+#main.compact #tagline {
+    display: none;
+}
+
+/* --- Responsive: narrow (width < 76) -------------------------------------- */
+
+/* The tree needs ~24 cells to be readable. Under that it would starve the
+   conversation, so the sidebar is dropped rather than squeezed. */
+#main.narrow #sidebar {
+    display: none;
+}
+
+#main.narrow #key-hints {
+    display: none;
+}
+
+/* --- Responsive: micro (width < 52) --------------------------------------- */
+
+#main.micro #header {
+    padding: 0;
+}
+
+#main.micro #brand {
+    padding: 0 1;
+}
+
+/* --- Responsive: short (height < 20) -------------------------------------- */
+
+/* Height is the scarce resource here: the prompt drops its frame and becomes
+   a single bare row, and the vertical gutters go with it. */
+#main.short #home-bar {
+    height: 1;
+    margin: 0 1;
+}
+
+#main.short #home {
+    padding: 0 1;
+}
+
+/* --- Responsive: tiny (height < 12) --------------------------------------- */
+
+/* Last thing to go: the wordmark. */
+#main.tiny #header {
+    display: none;
+}
+
+#main.tiny #home-bar {
+    margin: 0;
+}

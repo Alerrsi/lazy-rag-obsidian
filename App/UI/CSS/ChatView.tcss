@@ -1,0 +1,87 @@
+/* ==========================================================================
+   Conversation pane — the primary surface of the app.
+   ========================================================================== */
+
+#chat {
+    width: 1fr;
+    min-width: 0;
+    height: 1fr;
+    margin-right: 1;
+    background: $surface;
+    color: $ink;
+    border: round $line;
+    border-title-color: $ink-faint;
+    border-title-style: none;
+    padding: 0 1;
+}
+
+#messages {
+    width: 100%;
+    height: 1fr;
+}
+
+/* Docked so the log keeps the whole panel once the intro is dismissed, and
+   height-capped so a cramped terminal clips the copy instead of pushing the
+   conversation off screen. */
+#chat-intro {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    dock: top;
+    align-horizontal: center;
+    overflow-y: hidden;
+}
+
+#log {
+    width: 100%;
+    height: 1fr;
+    background: $surface;
+    color: $ink;
+    padding: 0;
+    text-align: left;
+    text-wrap: wrap;
+}
+
+/* Empty state: fills the void until the first question is asked.
+   A centred column capped at a readable measure, so the copy wraps as a
+   paragraph instead of stretching into a banner. */
+#chat-empty {
+    width: 1fr;
+    max-width: 72%;
+    height: auto;
+    color: $ink-dim;
+    background: $surface;
+    text-align: left;
+    text-style: none;
+    padding: 3 0 1 0;
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+#main.narrow #chat {
+    margin-right: 0;
+}
+
+#main.narrow #chat-empty {
+    max-width: 100%;
+    padding: 1 0 0 0;
+}
+
+#main.short #chat {
+    padding: 0;
+}
+
+#main.short #chat-empty {
+    padding: 0;
+}
+
+/* Too little room for the intro to be read: a clipped paragraph looks like a
+   bug, so the conversation just starts empty. */
+#main.tiny #chat-intro {
+    display: none;
+}
+
+#main.micro #chat {
+    border: none;
+    padding: 0;
+}
