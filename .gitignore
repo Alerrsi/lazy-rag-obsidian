@@ -1,3 +1,4 @@
 env
+.env
 App/DB/Chroma
 *__pychache__*
