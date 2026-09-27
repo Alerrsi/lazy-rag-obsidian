@@ -1,7 +1,9 @@
+import hashlib
+
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
+from langchain_community.document_loaders.text import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import DirectoryLoader
-from langchain_community.document_loaders import ObsidianLoader
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 
@@ -9,39 +11,42 @@ from langchain_community.vectorstores import Chroma
 
 
 
-class VectorialTrasnfer():
+class VectorialTransfer():
     OBSIDIAN_PATH = "/home/alerrsi/Documents/Obsidian/"
     DATABASE = "./App/DB/Chroma/"
 
 
-    def __init__(self):
 
-        self.loader = DirectoryLoader(
+    def __get_ids(self, chunks) -> list:
+
+        return [
+            hashlib.sha256(chunk.page_content.encode()).hexdigest()
+            for chunk in chunks
+        ]
+
+
+
+    def load(self) -> None:
+
+        embedding = OllamaEmbeddings(model="nomic-embed-text")
+
+        loader = DirectoryLoader(
             loader_cls=UnstructuredMarkdownLoader,
             path=self.OBSIDIAN_PATH,
             glob="**/*.md"
         )
 
-
-        docs = self.loader.load()
+        docs = loader.load()
 
         # definimos la cantidad de caracteres por chunk que son 1000
-        self.text_splitter = RecursiveCharacterTextSplitter(
+        text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200
         )
         # Aplicamos la división a los documentos
-        splits = self.text_splitter.split_documents(docs)
+        splits = text_splitter.split_documents(docs)
 
-
-        for i in splits:
-            print("Split 1")
-            print(i)
-
-        print(splits)
-
-        embedding = OllamaEmbeddings(model="nomic-embed-text")
-
+        ids = self.__get_ids(splits)
 
         self.vectorstore = Chroma.from_documents(
             documents=splits,
@@ -50,12 +55,3 @@ class VectorialTrasnfer():
             collection_name="Notas",
             collection_metadata={'hnsw:space': 'cosine'}
         )
-
-
-
-    def add():
-        pass
-
-
-
-vector = VectorialTrasnfer()
