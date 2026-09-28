@@ -13,52 +13,49 @@ from VectorialTransfer import VectorialTransfer
 # cargar API KEY
 dotenv.load_dotenv()
 
+class Chain:
+    plantilla = """
+    Como modelo debes responder solamente basandote en el contexto dado,
+    si hay algo que no coincide o no existe es tu deber decir que la información
+    no se encuentra en tus fuentes de texto.
+    Contexto:
+    {context}
+
+    Pregunta:
+    {question}
+
+    Respuesta:
+    """
+    transfer = VectorialTransfer()
+
+    def search(self, question: str) -> str:
+        prompt = ChatPromptTemplate.from_template(self.plantilla)
+
+        # cargamos el modelo
+        modelo = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 
-plantilla = """
-Como modelo debes responder solamente basandote en el contexto dado,
-si hay algo que no coincide o no existe es tu deber decir que la información
-no se encuentra en tus fuentes de texto.
-Contexto:
-{context}
-
-Pregunta:
-{question}
-
-Respuesta:
-"""
-
-prompt = ChatPromptTemplate.from_template(plantilla)
-
-# cargamos el modelo
-modelo = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        # Clase que almacena los elementos
 
 
-# Clase que almacena los elementos
-transfer = VectorialTransfer()
-
-transfer.load()
+        self.transfer.load()
 
 
-# buscador de elementos con un maximo de 4 concidencias
-retriever = transfer.vectorstore.as_retriever(search_kwargs={"k": 4})
+        # buscador de elementos con un maximo de 4 concidencias
+        retriever = self.transfer.vectorstore.as_retriever(search_kwargs={"k": 4})
+        # cadena final
+        chain =  (
+            {
+            "context": retriever | formatter,
+            "question": RunnablePassthrough()
+            } |
+            prompt |
+            modelo |
+            StrOutputParser()
+        )
 
-def formatter(docs : list[Document]) -> str :
-    return "\n\n".join(doc.page_content for doc in docs)
-
-
-# cadena final
-chain =  (
-    {
-    "context": retriever | formatter,
-    "question": RunnablePassthrough()
-    } |
-    prompt |
-    modelo |
-    StrOutputParser()
-)
+        return chain.invoke(question)
 
 
-response = chain.invoke("Como se calcula el SoC de as baterias")
-
-print(response)
+    def _formatter(self, docs : list[Document]) -> str :
+        return "\n\n".join(doc.page_content for doc in docs)
