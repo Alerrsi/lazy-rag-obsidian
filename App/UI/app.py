@@ -8,6 +8,7 @@ from .components.prompt.SearchBarView import SearchBarView
 from .components.filemanager.FileManagerView import FileManagerView
 from .components.chat.ChatView import ChatView
 from .theme import LAZY_OBSIDIAN
+from App.RAG.Chain import Chain
 
 # Breakpoints, in cells. The TUI is a fluid surface, so instead of relying on
 # percentages (which round to nothing on small terminals and overflow on large
@@ -36,6 +37,9 @@ LAYOUT_MODES = (
 
 
 class Myapp(App):
+
+    chain = Chain()
+
     CSS_PATH = [
         "CSS/app.tcss",
         "CSS/ChatView.tcss",
@@ -87,4 +91,12 @@ class Myapp(App):
     def send(self) -> None:
         barra = self.query_one(SearchBarView)
         barra.send()
-        entrada = self.query_one("#message").value = ""
+        input_widget = self.query_one("#message", Input)
+        entrada = input_widget.value
+        input_widget.value = ""
+        self._showResponse(entrada)
+
+    def _showResponse(self, text: str):
+        response = self.chain.search(text)
+        chat = self.query_one("#chat", ChatView)
+        chat.add_assistant_message(response)

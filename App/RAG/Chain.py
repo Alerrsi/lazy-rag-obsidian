@@ -7,7 +7,7 @@ from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 
-from VectorialTransfer import VectorialTransfer
+from .VectorialTransfer import VectorialTransfer
 
 
 # cargar API KEY
@@ -27,30 +27,23 @@ class Chain:
     Respuesta:
     """
     transfer = VectorialTransfer()
+    prompt = ChatPromptTemplate.from_template(plantilla)
+
+    # cargamos el modelo
+    modelo = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
     def search(self, question: str) -> str:
-        prompt = ChatPromptTemplate.from_template(self.plantilla)
-
-        # cargamos el modelo
-        modelo = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-
-
-        # Clase que almacena los elementos
-
-
         self.transfer.load()
-
-
         # buscador de elementos con un maximo de 4 concidencias
         retriever = self.transfer.vectorstore.as_retriever(search_kwargs={"k": 4})
         # cadena final
         chain =  (
             {
-            "context": retriever | formatter,
+            "context": retriever | self._formatter,
             "question": RunnablePassthrough()
             } |
-            prompt |
-            modelo |
+            self.prompt |
+            self.modelo |
             StrOutputParser()
         )
 
