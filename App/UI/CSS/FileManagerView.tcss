@@ -17,6 +17,23 @@
     padding: 0 1;
 }
 
+#btn-change-vault {
+    width: 100%;
+    height: 1;
+    min-width: 0;
+    margin-bottom: 1;
+    background: $boost;
+    color: $ink-dim;
+    border: none;
+    text-align: center;
+}
+
+#btn-change-vault:hover {
+    background: $brand 30%;
+    color: $brand-bright;
+    text-style: bold;
+}
+
 #vault-tree {
     width: 100%;
     height: 1fr;

@@ -14,8 +14,11 @@ class SearchBarView(Widget):
         super().__init__(**kwargs)
         self.border_title = "PREGUNTA"
 
-    def send(self):
-        self.on_send(self.query_one(Input).value)
+    def send(self, text: str | None = None):
+        if text is None:
+            text = self.query_one(Input).value
+        if self.on_send:
+            self.on_send(text)
 
     def compose(self) -> ComposeResult:
         yield Label("❯", id="prompt-caret")

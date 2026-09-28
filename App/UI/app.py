@@ -1,14 +1,19 @@
-from textual import on
+import os
+from textual import on, work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
-from textual.widgets import Input, Label
+from textual.widgets import Button, Input, Label
+from textual.worker import WorkerState
 
 from .components.prompt.SearchBarView import SearchBarView
 from .components.filemanager.FileManagerView import FileManagerView
+from .components.filemanager.VaultModal import VaultModal
 from .components.chat.ChatView import ChatView
 from .theme import LAZY_OBSIDIAN
 from App.RAG.Chain import Chain
+from App.RAG.VectorialTransfer import VectorialTransfer
 
 # Breakpoints, in cells. The TUI is a fluid surface, so instead of relying on
 # percentages (which round to nothing on small terminals and overflow on large
@@ -38,26 +43,31 @@ LAYOUT_MODES = (
 
 class Myapp(App):
 
-    chain = Chain()
+    BINDINGS = [
+        Binding("ctrl+o", "open_change_vault", "Cambiar bóveda", show=True),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.chain = Chain()
+        self._active_ask = None
+        self.register_theme(LAZY_OBSIDIAN)
+        self.theme = LAZY_OBSIDIAN.name
 
     CSS_PATH = [
         "CSS/app.tcss",
         "CSS/ChatView.tcss",
         "CSS/FileManagerView.tcss",
         "CSS/SearchBar.tcss",
+        "CSS/VaultModal.tcss",
     ]
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.register_theme(LAZY_OBSIDIAN)
-        self.theme = LAZY_OBSIDIAN.name
 
     def compose(self) -> ComposeResult:
         with Vertical(id="main"):
             with Horizontal(id="header"):
                 yield Label("LAZY OBSIDIAN", id="brand")
                 yield Label("tu bóveda, consultable desde la terminal", id="tagline")
-                yield Label("enter enviar · tab paneles", id="key-hints")
+                yield Label("enter enviar · ctrl+o cambiar bóveda · tab paneles", id="key-hints")
             with Horizontal(id="home"):
                 yield ChatView(id="chat")
                 yield FileManagerView(id="sidebar")
@@ -72,6 +82,9 @@ class Myapp(App):
         # The prompt is the reason the app is open: start there instead of on
         # the first focusable widget in DOM order (the log).
         self.query_one("#message", Input).focus()
+        # Abrir el indice en background: si la boveda cambio desde la ultima
+        # corrida, la primera pregunta no tiene que pagar ese costo.
+        self.warm_worker(self.chain.transfer.get_vectorstore)
 
     def on_resize(self, event: Resize) -> None:
         self._apply_layout_mode(event.size.width, event.size.height)
@@ -87,16 +100,144 @@ class Myapp(App):
                 text for minimum, text in PROMPTS if width >= minimum
             )
 
+    @on(Button.Pressed, "#btn-change-vault")
+    def on_btn_change_vault(self) -> None:
+        self.action_open_change_vault()
+
+    def action_open_change_vault(self) -> None:
+        current_path = getattr(VectorialTransfer, "OBSIDIAN_PATH", FileManagerView.VAULT_ROOT)
+        self.push_screen(VaultModal(current_path=current_path), self._on_vault_modal_result)
+
+    def _on_vault_modal_result(self, new_path: str | None) -> None:
+        if new_path:
+            self.change_vault_path(new_path)
+        self.query_one("#message", Input).focus()
+
+    def change_vault_path(self, new_path: str) -> None:
+        abs_path = os.path.abspath(os.path.expanduser(new_path))
+
+        # 1. Cambiar OBSIDIAN_PATH de la clase VectorialTransfer y en la instancia
+        VectorialTransfer.OBSIDIAN_PATH = abs_path
+        self.chain.use_vault(abs_path)
+
+        # 2. Cambiar VAULT_ROOT dentro de FileManagerView
+        import App.UI.components.filemanager.FileManagerView as fmv_module
+        fmv_module.VAULT_ROOT = abs_path
+        FileManagerView.VAULT_ROOT = abs_path
+        file_manager = self.query_one(FileManagerView)
+        file_manager.update_vault_root(abs_path)
+
+        # Notificación y mensaje de confirmación
+        self.notify(f"Bóveda cambiada a: {abs_path}", title="Bóveda actualizada", severity="information")
+        chat = self.query_one("#chat", ChatView)
+        chat.add_assistant_message(f"📁 Directorio de fuentes actualizado a: [bold]{abs_path}[/bold]")
+        self.query_one("#message", Input).focus()
+
     @on(Input.Submitted, "#message")
     def send(self) -> None:
-        barra = self.query_one(SearchBarView)
-        barra.send()
         input_widget = self.query_one("#message", Input)
-        entrada = input_widget.value
+        entrada = input_widget.value.strip()
         input_widget.value = ""
-        self._showResponse(entrada)
 
-    def _showResponse(self, text: str):
-        response = self.chain.search(text)
-        chat = self.query_one("#chat", ChatView)
-        chat.add_assistant_message(response)
+        if not entrada:
+            return
+
+        # Comando rápido de cambio de directorio: /vault [ruta], /dir [ruta] o /path [ruta]
+        lower = entrada.lower()
+        if lower.startswith(("/vault", "/dir", "/path")):
+            parts = entrada.split(maxsplit=1)
+            if len(parts) > 1:
+                target_path = os.path.expanduser(parts[1].strip())
+                if os.path.isdir(target_path):
+                    self.change_vault_path(target_path)
+                else:
+                    self.notify(f"Directorio no encontrado: {parts[1]}", title="Error", severity="error")
+                    chat = self.query_one("#chat", ChatView)
+                    chat.add_assistant_message(f"⚠️ El directorio no existe: [bold]{parts[1]}[/bold]")
+            else:
+                self.action_open_change_vault()
+            return
+
+        barra = self.query_one(SearchBarView)
+        barra.send(entrada)
+        self._ask(entrada)
+
+    def _ask(self, text: str) -> None:
+        self._set_busy(True)
+        self._active_ask = self.ask_worker(self.chain.search, text)
+
+    @work(thread=True, exclusive=True, group="ask", exit_on_error=False)
+    def ask_worker(self, search, question: str) -> str:
+        """Corre la consulta en un hilo.
+
+        Antes era una llamada directa desde el handler de Input.Submitted:
+        retrieval y Gemini corrian en el event loop de Textual, asi que la TUI
+        entera se quedaba pegada, sin repintar y sin responder ctrl+c.
+        """
+        try:
+            return search(question)
+        except Exception as error:
+            return f"⚠️ No pude responder: {error}"
+
+    @work(thread=True, exclusive=True, group="index", exit_on_error=False)
+    def warm_worker(self, open_index) -> None:
+        """Abre/sincroniza el indice fuera del event loop."""
+        open_index()
+
+    def on_worker_state_changed(self, event) -> None:
+        # Unico mensaje de estado de los workers: se llama Worker.StateChanged y
+        # lleva namespace "worker", asi que el handler va con el prefijo entero.
+        # Con "on_work_state_changed" no se dispara nunca.
+        worker = event.worker
+
+        if worker.group == "index":
+            self._report_index(worker)
+            return
+
+        # exclusive=True cancela la pregunta anterior al mandar otra: su
+        # CANCELLED no debe apagar el spinner de la que esta corriendo.
+        if worker is not self._active_ask:
+            return
+
+        if worker.state == WorkerState.SUCCESS:
+            self._set_busy(False)
+            self.query_one("#chat", ChatView).add_assistant_message(worker.result)
+            self.query_one("#message", Input).focus()
+        elif worker.state in (WorkerState.ERROR, WorkerState.CANCELLED):
+            self._set_busy(False)
+            if worker.state == WorkerState.ERROR:
+                self.query_one("#chat", ChatView).add_assistant_message(
+                    f"⚠️ No pude responder: {worker.error}"
+                )
+            self.query_one("#message", Input).focus()
+
+    def _report_index(self, worker) -> None:
+        if worker.state == WorkerState.ERROR:
+            self.query_one("#chat", ChatView).add_assistant_message(
+                f"⚠️ No pude leer la bóveda: {worker.error}"
+            )
+            return
+        if worker.state != WorkerState.SUCCESS:
+            return
+
+        stats = self.chain.transfer.stats
+        if not stats.chunks_written and not stats.changed_files:
+            return
+        partes = []
+        if stats.added_files:
+            partes.append(f"{len(stats.added_files)} nuevas")
+        if stats.modified_files:
+            partes.append(f"{len(stats.modified_files)} modificadas")
+        if stats.removed_files:
+            partes.append(f"{len(stats.removed_files)} borradas")
+        self.query_one("#chat", ChatView).add_assistant_message(
+            f"📝 Índice actualizado: {', '.join(partes)} "
+            f"({stats.chunks_written} fragmentos)."
+        )
+
+    def _set_busy(self, busy: bool) -> None:
+        self.query_one("#chat", ChatView).set_status(
+            "⏳ Buscando en tus notas…" if busy else None
+        )
+        self.query_one("#message", Input).disabled = busy
+        self.query_one(SearchBarView).border_subtitle = "…" if busy else ""

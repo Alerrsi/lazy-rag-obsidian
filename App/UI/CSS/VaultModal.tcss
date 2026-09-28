@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Vault Modal — modal dialog for changing notes/vault path
+   ========================================================================== */
+
+VaultModal {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.75);
+}
+
+#vault-modal-dialog {
+    width: 66;
+    max-width: 90%;
+    height: auto;
+    border: round $brand;
+    background: $surface;
+    padding: 1 2;
+}
+
+#vault-modal-title {
+    color: $brand-bright;
+    text-style: bold;
+    width: 100%;
+    text-align: center;
+}
+
+#vault-modal-help {
+    color: $ink-dim;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#vault-modal-input {
+    width: 100%;
+    background: $panel;
+    color: $ink;
+    border: tall $line;
+    margin-bottom: 0;
+}
+
+#vault-modal-input:focus {
+    border: tall $brand;
+}
+
+#vault-modal-error {
+    color: $error;
+    height: 1;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#vault-modal-buttons {
+    width: 100%;
+    height: 3;
+    align: right middle;
+}
+
+#vault-modal-buttons > Button {
+    margin-left: 1;
+}
+
+#btn-modal-ok {
+    background: $brand;
+    color: $text;
+}
+
+#btn-modal-ok:hover {
+    background: $brand-bright;
+}
+
+#btn-modal-cancel {
+    background: $panel;
+    color: $ink-dim;
+    border: none;
+}
+
+#btn-modal-cancel:hover {
+    background: $boost;
+    color: $ink;
+}
