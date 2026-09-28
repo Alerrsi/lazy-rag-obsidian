@@ -43,7 +43,7 @@ preguntas está en camino.
 
 ## Empezar
 
-Necesitás Python 3.13, [Ollama](https://ollama.com) corriendo en local y
+Necesitas Python 3.13, [Ollama](https://ollama.com) corriendo en local y
 `ollama pull nomic-embed-text`.
 
 ```bash
