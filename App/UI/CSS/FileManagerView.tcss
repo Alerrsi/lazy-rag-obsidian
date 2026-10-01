@@ -1,13 +1,12 @@
 /* ==========================================================================
    Sidebar — vault tree.
-   Fixed-width well next to the 1fr conversation, dropped when there is no
-   room for it to be readable.
+   Proportional and interactive horizontal resizing next to the chat pane.
    ========================================================================== */
 
 #sidebar {
     width: 34;
-    min-width: 0;
-    max-width: 40%;
+    min-width: 18;
+    max-width: 50;
     height: 1fr;
     background: $surface;
     color: $ink;
@@ -85,11 +84,6 @@
 }
 
 /* --- Responsive ----------------------------------------------------------- */
-
-#main.compact #sidebar {
-    width: 26;
-    max-width: 34%;
-}
 
 #main.narrow #sidebar {
     display: none;

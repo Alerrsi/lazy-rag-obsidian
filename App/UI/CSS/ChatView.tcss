@@ -4,9 +4,8 @@
 
 #chat {
     width: 1fr;
-    min-width: 0;
+    min-width: 30;
     height: 1fr;
-    margin-right: 1;
     background: $surface;
     color: $ink;
     border: round $line;
@@ -20,9 +19,8 @@
     height: 1fr;
 }
 
-/* Docked so the log keeps the whole panel once the intro is dismissed, and
-   height-capped so a cramped terminal clips the copy instead of pushing the
-   conversation off screen. */
+/* Docked so the intro can be centred on its own, and height-capped so a
+   cramped terminal clips the copy instead of pushing the conversation off screen. */
 #chat-intro {
     width: 100%;
     height: auto;
@@ -32,19 +30,16 @@
     overflow-y: hidden;
 }
 
-#log {
+#chat-scroll {
     width: 100%;
     height: 1fr;
     background: $surface;
     color: $ink;
-    padding: 0;
-    text-align: left;
-    text-wrap: wrap;
+    padding: 1 1;
+    overflow-y: auto;
 }
 
-/* Empty state: fills the void until the first question is asked.
-   A centred column capped at a readable measure, so the copy wraps as a
-   paragraph instead of stretching into a banner. */
+/* Empty state: fills the void until the first question is asked. */
 #chat-empty {
     width: 1fr;
     max-width: 72%;
@@ -56,8 +51,60 @@
     padding: 3 0 1 0;
 }
 
-/* In-flight feedback. Sits under the log so it never shifts the transcript,
-   and the only place the app says it is working. */
+/* ==========================================================================
+   Estilo de mensajes tipo Claude / Modern Prompt (como en la foto de referencia)
+   ========================================================================== */
+
+/* 1. Tarjeta de Usuario:
+      - Borde grueso a la izquierda con el color primario/violeta
+      - Fondo panel sutil
+      - Espaciado interior y superior
+*/
+.user-card {
+    width: 100%;
+    height: auto;
+    background: $panel;
+    border-left: thick $primary;
+    padding: 1 2;
+    margin-top: 1;
+    margin-bottom: 2;
+}
+
+.user-text {
+    width: 100%;
+    color: $ink;
+    text-style: none;
+}
+
+/* 2. Tarjeta del Asistente:
+      - Más aire y separación respecto a la pregunta del usuario
+      - Sin caja envolvente pesada, texto abierto y legible
+      - Metadatos sutiles de Thought / Modelo
+*/
+.assistant-card {
+    width: 100%;
+    height: auto;
+    background: transparent;
+    padding: 0 2;
+    margin-bottom: 2;
+}
+
+.assistant-meta-thought {
+    width: 100%;
+    height: auto;
+    color: $accent;
+    text-style: italic;
+    margin-bottom: 1;
+}
+
+.assistant-markdown {
+    width: 100%;
+    color: $ink;
+    background: transparent;
+    padding: 0;
+}
+
+/* In-flight feedback. Sits under the log so it never shifts the transcript */
 #chat-status {
     width: 100%;
     height: auto;
@@ -77,6 +124,16 @@
     padding: 1 0 0 0;
 }
 
+#main.narrow .user-card {
+    padding: 1 1;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+#main.narrow .assistant-card {
+    padding: 0 1;
+}
+
 #main.short #chat {
     padding: 0;
 }
@@ -85,8 +142,17 @@
     padding: 0;
 }
 
-/* Too little room for the intro to be read: a clipped paragraph looks like a
-   bug, so the conversation just starts empty. */
+#main.short .user-card {
+    margin-top: 0;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+#main.short .assistant-card {
+    margin-bottom: 1;
+}
+
+/* Too little room for the intro to be read */
 #main.tiny #chat-intro {
     display: none;
 }

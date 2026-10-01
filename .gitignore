@@ -2,3 +2,6 @@ env
 .env
 App/DB/Chroma
 *__pychache__*
+OPTIMIZACIÓN.MD
+README.MD
+AGENTS.MD

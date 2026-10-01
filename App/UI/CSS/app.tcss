@@ -70,6 +70,10 @@ Screen {
     layout: horizontal;
 }
 
+#home > HorizontalSplitter {
+    margin: 0 1;
+}
+
 /* --- Prompt zone --------------------------------------------------------- */
 
 #home-bar {
@@ -115,6 +119,10 @@ Screen {
     display: none;
 }
 
+#main.narrow HorizontalSplitter {
+    display: none;
+}
+
 #main.narrow #key-hints {
     display: none;
 }
@@ -147,8 +155,4 @@ Screen {
 /* Last thing to go: the wordmark. */
 #main.tiny #header {
     display: none;
-}
-
-#main.tiny #home-bar {
-    margin: 0;
 }

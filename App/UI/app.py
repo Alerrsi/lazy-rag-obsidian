@@ -11,6 +11,7 @@ from .components.prompt.SearchBarView import SearchBarView
 from .components.filemanager.FileManagerView import FileManagerView
 from .components.filemanager.VaultModal import VaultModal
 from .components.filemanager.NotePreviewModal import NotePreviewModal
+from .components.filemanager.HorizontalSplitter import HorizontalSplitter
 from .components.chat.ChatView import ChatView
 from .theme import LAZY_OBSIDIAN
 from App.RAG.Chain import Chain
@@ -19,6 +20,7 @@ from App.RAG.VectorialTransfer import VectorialTransfer
 # Breakpoints, in cells. The TUI is a fluid surface, so instead of relying on
 # percentages (which round to nothing on small terminals and overflow on large
 # ones) the layout switches modes and every size is driven by 1fr plus fixed wells.
+WIDE_WIDTH = 130
 COMPACT_WIDTH = 104
 NARROW_WIDTH = 76
 MICRO_WIDTH = 52
@@ -34,7 +36,8 @@ PROMPTS = (
 )
 
 LAYOUT_MODES = (
-    ("compact", lambda width, height: width < COMPACT_WIDTH),
+    ("wide", lambda width, height: width >= WIDE_WIDTH),
+    ("compact", lambda width, height: NARROW_WIDTH <= width < COMPACT_WIDTH),
     ("narrow", lambda width, height: width < NARROW_WIDTH),
     ("micro", lambda width, height: width < MICRO_WIDTH),
     ("short", lambda width, height: height < SHORT_HEIGHT),
@@ -72,6 +75,7 @@ class Myapp(App):
                 yield Label("enter enviar · ctrl+o cambiar bóveda · tab paneles", id="key-hints")
             with Horizontal(id="home"):
                 yield ChatView(id="chat")
+                yield HorizontalSplitter()
                 yield FileManagerView(id="sidebar")
             with Horizontal(id="home-bar"):
                 yield SearchBarView(id="search-bar")
