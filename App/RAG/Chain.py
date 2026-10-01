@@ -1,3 +1,6 @@
+import re
+from typing import Iterator
+
 import dotenv
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -12,9 +15,15 @@ dotenv.load_dotenv()
 
 RETRIEVER_K = 4
 
+# Patrones comunes de saludos o cortesía que no requieren consultar la base de datos vectorial
+GREETING_PATTERN = re.compile(
+    r"^(hola|buen(os)?\s*(d[ií]as|tardes|noches)|hey|qu[eé]\s*tal|buenas|c[oó]mo\s*est[aá]s?|saludos)[\s\.,!\?]*$",
+    re.IGNORECASE,
+)
+
 
 class Chain:
-    """Pregunta -> recuperacion -> Gemini. El indice se abre, no se rehace."""
+    """Pregunta -> recuperacion -> Gemini con streaming y bypass de saludos."""
 
     plantilla = """
     Como modelo respondes solamente basandote en el contexto dado.
@@ -41,21 +50,31 @@ class Chain:
 
     def __init__(self) -> None:
         self.transfer = VectorialTransfer()
-        self.modelo = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        self.modelo = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.2,
+        )
         self._retriever = None
 
-    def search(self, question: str) -> str:
+    def _get_retriever(self):
         if self._retriever is None:
-            # get_vectorstore() es idempotente: la primera vez sincroniza lo
-            # que falte, despues solo devuelve el handle. Antes esto llamaba a
-            # load(), que reindexaba la boveda completa en cada pregunta.
             self._retriever = self.transfer.get_vectorstore().as_retriever(
                 search_kwargs={"k": RETRIEVER_K}
             )
+        return self._retriever
 
+    def stream_search(self, question: str) -> Iterator[str]:
+        """Transmite tokens generados por el LLM en tiempo real (streaming)."""
+        clean_q = question.strip()
+        # Fast path: Saludos conversacionales sin inferencia RAG pesada
+        if GREETING_PATTERN.match(clean_q):
+            yield "¡Hola! ¿Cómo estás? ¿En qué puedo ayudarte hoy con tus notas?"
+            return
+
+        retriever = self._get_retriever()
         chain = (
             {
-                "context": self._retriever | self._formatter,
+                "context": retriever | self._formatter,
                 "question": RunnablePassthrough(),
             }
             | self.prompt
@@ -63,7 +82,12 @@ class Chain:
             | StrOutputParser()
         )
 
-        return chain.invoke(question)
+        for chunk in chain.stream(question):
+            yield chunk
+
+    def search(self, question: str) -> str:
+        """Versión sincrónica que acumula el stream completo."""
+        return "".join(self.stream_search(question))
 
     def use_vault(self, path: str) -> None:
         """Cambia la boveda y tira el retriever cacheado."""
@@ -73,8 +97,11 @@ class Chain:
     def _formatter(self, docs: list[Document]) -> str:
         if not docs:
             return "(ningun fragmento de tus notas coincide con la pregunta)"
-        bloques = []
+
+        partes = []
         for doc in docs:
-            nota = doc.metadata.get("note") or doc.metadata.get("source", "?")
-            bloques.append(f"### Nota: {nota}\n{doc.page_content}")
-        return "\n\n".join(bloques)
+            partes.append(
+                f"---\nNota: {doc.metadata.get('note', doc.metadata.get('source', ''))}\n"
+                f"{doc.page_content.strip()}"
+            )
+        return "\n\n".join(partes)

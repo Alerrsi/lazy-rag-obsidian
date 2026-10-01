@@ -12,3 +12,15 @@
   - [x] tabla especificas con chats y normalizada
   - [x] Configuraciones BASICAS como el directorio actual(modifica en el codigo para que tome la opción siempre de la base de datos)
 - [x] Menu lateral desplegable con opción de ir a configuración e historial de chats
+- [x] Almacenamiento de chat en historial: cuando un usuario abre un nuevo chat no se debe guardar automaticamente en la sesión, lo que debe hacer es enviar un primer mensaje y el chat se guardará con el:
+  - [x] id 
+  - [x] nombre (generado a partir del primer mensaje)
+  - [x] modelo usado
+  - [x] Tabla normalizada en sqlite:
+    - [x] Id mensaje
+    - [x] remitente
+    - [x] mensaje (texto plano)
+    - [x] hora (mostrar en el chat)
+- []Al iniciar un nuevo chat se debe un mensaje de bienvenida dependiendo de la hora del dia, y personalizarlo, no se debe motrar un supuesto mensaje enviado por el usuario: 
+    - El mensaje debe estar escrito con letra grande en el centro del chat 
+    - Cuando el usuairo escriba un mensaje se de quitar ese mensaje de bienvenida

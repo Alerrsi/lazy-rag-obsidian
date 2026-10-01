@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
 import os
+import time
+import uuid
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -18,7 +21,7 @@ from .components.drawer.SideDrawerView import SideDrawerView
 from .components.history.ChatHistoryModal import ChatHistoryModal
 from .components.settings.SettingsModal import SettingsModal
 from .theme import LAZY_OBSIDIAN
-from App.DB.storage import AppDatabase
+from App.DB.storage import AppDatabase, ChatSession
 from App.RAG.Chain import Chain
 from App.RAG.VectorialTransfer import VectorialTransfer
 
@@ -63,7 +66,21 @@ class Myapp(App):
     def __init__(self) -> None:
         super().__init__()
         self.db = AppDatabase.get_instance()
-        self.current_session = self.db.get_or_create_default_session()
+        # Look for most recent session or create an unpersisted new chat
+        recent = self.db.get_most_recent_session()
+        if recent is not None:
+            self.current_session = recent
+            self._session_is_persisted = True
+        else:
+            self.current_session = ChatSession(
+                id=str(uuid.uuid4()),
+                title="Nueva Conversación",
+                model="gemini-2.5-flash",
+                created_at=datetime.now(timezone.utc).isoformat(),
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+            self._session_is_persisted = False
+
         self.chain = Chain()
         self._active_ask = None
         self._sidebar_visible = True
@@ -99,8 +116,9 @@ class Myapp(App):
         barra = self.query_one(SearchBarView)
         barra.on_send = chat.on_input_submitted
 
-        # Load persisted messages from SQLite for current session
-        self._load_active_session_messages()
+        # Load persisted messages from SQLite for current session if already persisted
+        if self._session_is_persisted:
+            self._load_active_session_messages()
 
         self._apply_layout_mode(self.size.width, self.size.height)
         # The prompt is the reason the app is open: start there instead of on
@@ -113,9 +131,10 @@ class Myapp(App):
     def _load_active_session_messages(self) -> None:
         chat = self.query_one(ChatView)
         chat.clear_messages()
-        saved_messages = self.db.get_messages(self.current_session.id)
-        if saved_messages:
-            chat.load_history(saved_messages)
+        if self._session_is_persisted:
+            saved_messages = self.db.get_messages(self.current_session.id)
+            if saved_messages:
+                chat.load_history(saved_messages, model_name=self.current_session.model)
 
     def on_resize(self, event: Resize) -> None:
         self._apply_layout_mode(event.size.width, event.size.height)
@@ -187,10 +206,22 @@ class Myapp(App):
     @on(SideDrawerView.NewChatRequested)
     def on_drawer_new_chat(self) -> None:
         self.query_one(SideDrawerView).close()
-        new_sess = self.db.create_session("Conversación " + str(len(self.db.list_sessions()) + 1))
-        self.current_session = new_sess
-        self._load_active_session_messages()
-        self.notify(f"Iniciada {new_sess.title}", title="Nueva Conversación", severity="information")
+        self._start_new_unpersisted_chat()
+
+    def _start_new_unpersisted_chat(self) -> None:
+        """Initializes a new empty chat in memory without saving to SQLite until the first message."""
+        now = datetime.now(timezone.utc).isoformat()
+        self.current_session = ChatSession(
+            id=str(uuid.uuid4()),
+            title="Nueva Conversación",
+            model="gemini-2.5-flash",
+            created_at=now,
+            updated_at=now,
+        )
+        self._session_is_persisted = False
+        chat = self.query_one(ChatView)
+        chat.clear_messages()
+        self.notify("Nuevo chat listo. Se guardará al enviar tu primer mensaje.", title="Nuevo Chat", severity="information")
         self.query_one("#message", Input).focus()
 
     def action_open_chat_history(self) -> None:
@@ -200,10 +231,19 @@ class Myapp(App):
         )
 
     def _on_chat_history_result(self, selected_session_id: str | None) -> None:
-        if selected_session_id and selected_session_id != self.current_session.id:
+        if not selected_session_id:
+            self.query_one("#message", Input).focus()
+            return
+
+        if selected_session_id == "__NEW_CHAT__":
+            self._start_new_unpersisted_chat()
+            return
+
+        if selected_session_id != self.current_session.id or not self._session_is_persisted:
             sessions = {s.id: s for s in self.db.list_sessions()}
             if selected_session_id in sessions:
                 self.current_session = sessions[selected_session_id]
+                self._session_is_persisted = True
                 self._load_active_session_messages()
                 self.notify(f"Cargado: {self.current_session.title}", title="Chat Cambiado", severity="information")
         self.query_one("#message", Input).focus()
@@ -308,34 +348,63 @@ class Myapp(App):
                 self.action_open_change_vault()
             return
 
+        # Si es un nuevo chat y aún no está guardado en SQLite, guardarlo ahora con su primer mensaje
+        if not self._session_is_persisted:
+            # Generar un título descriptivo basado en las primeras palabras del mensaje
+            words = entrada.split()
+            first_words = " ".join(words[:5])
+            title = first_words[:35] + ("…" if len(entrada) > 35 else "")
+            persisted_sess = self.db.create_session(
+                title=title,
+                model="gemini-2.5-flash",
+                session_id=self.current_session.id,
+            )
+            self.current_session = persisted_sess
+            self._session_is_persisted = True
+
         barra = self.query_one(SearchBarView)
         barra.send(entrada)
 
-        # Persistir mensaje de usuario en SQLite
+        # Persistir mensaje de usuario en SQLite con marca de tiempo actual
+        now_iso = datetime.now(timezone.utc).isoformat()
         self.db.add_message(
             session_id=self.current_session.id,
             sender="user",
             content=entrada,
+            created_at=now_iso,
         )
 
         self._ask(entrada)
 
     def _ask(self, text: str) -> None:
         self._set_busy(True)
-        self._active_ask = self.ask_worker(self.chain.search, text)
+        chat = self.query_one("#chat", ChatView)
+        # Montar tarjeta de asistente vacía para streaming en vivo con modelo y hora
+        chat.start_streaming_assistant_message(
+            model_name=self.current_session.model,
+        )
+        self._active_ask = self.ask_worker(text)
 
     @work(thread=True, exclusive=True, group="ask", exit_on_error=False)
-    def ask_worker(self, search, question: str) -> str:
-        """Corre la consulta en un hilo.
-
-        Antes era una llamada directa desde el handler de Input.Submitted:
-        retrieval y Gemini corrian en el event loop de Textual, asi que la TUI
-        entera se quedaba pegada, sin repintar y sin responder ctrl+c.
-        """
+    def ask_worker(self, question: str) -> str:
+        """Transmite la respuesta token a token en un hilo desacoplado."""
+        full_text = []
+        t0 = time.perf_counter()
         try:
-            return search(question)
+            for chunk in self.chain.stream_search(question):
+                full_text.append(chunk)
+                # Enviar token al hilo de Textual en tiempo real
+                self.call_from_thread(self._on_chunk_received, chunk)
+            elapsed = time.perf_counter() - t0
+            return "".join(full_text)
         except Exception as error:
-            return f"⚠️ No pude responder: {error}"
+            err_msg = f"⚠️ No pude responder: {error}"
+            self.call_from_thread(self._on_chunk_received, err_msg)
+            return err_msg
+
+    def _on_chunk_received(self, chunk: str) -> None:
+        chat = self.query_one("#chat", ChatView)
+        chat.append_streaming_chunk(chunk)
 
     @work(thread=True, exclusive=True, group="index", exit_on_error=False)
     def warm_worker(self, open_index) -> None:
@@ -345,7 +414,6 @@ class Myapp(App):
     def on_worker_state_changed(self, event) -> None:
         # Unico mensaje de estado de los workers: se llama Worker.StateChanged y
         # lleva namespace "worker", asi que el handler va con el prefijo entero.
-        # Con "on_work_state_changed" no se dispara nunca.
         worker = event.worker
 
         if worker.group == "index":
@@ -360,23 +428,26 @@ class Myapp(App):
         if worker.state == WorkerState.SUCCESS:
             self._set_busy(False)
             answer = worker.result
-            self.query_one("#chat", ChatView).add_assistant_message(answer)
+            now_iso = datetime.now(timezone.utc).isoformat()
             # Persistir respuesta del asistente en SQLite
             self.db.add_message(
                 session_id=self.current_session.id,
                 sender="assistant",
                 content=answer,
+                created_at=now_iso,
             )
             self.query_one("#message", Input).focus()
         elif worker.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._set_busy(False)
+            now_iso = datetime.now(timezone.utc).isoformat()
             if worker.state == WorkerState.ERROR:
                 err_msg = f"⚠️ No pude responder: {worker.error}"
-                self.query_one("#chat", ChatView).add_assistant_message(err_msg)
+                self.query_one("#chat", ChatView).append_streaming_chunk(f"\n{err_msg}")
                 self.db.add_message(
                     session_id=self.current_session.id,
                     sender="assistant",
                     content=err_msg,
+                    created_at=now_iso,
                 )
             self.query_one("#message", Input).focus()
 

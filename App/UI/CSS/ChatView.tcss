@@ -1,62 +1,67 @@
 /* ==========================================================================
-   Conversation pane — the primary surface of the app.
+   ChatView styles
+   Two zones: the intro (empty state) and the scrollable transcript.
    ========================================================================== */
 
-#chat {
+ChatView {
     width: 1fr;
-    min-width: 30;
     height: 1fr;
-    background: $surface;
-    color: $ink;
-    border: round $line;
-    border-title-color: $ink-faint;
-    border-title-style: none;
-    padding: 0 1;
+    background: $background;
 }
 
 #messages {
     width: 100%;
-    height: 1fr;
+    height: 100%;
+    layout: vertical;
 }
 
-/* Docked so the intro can be centred on its own, and height-capped so a
-   cramped terminal clips the copy instead of pushing the conversation off screen. */
 #chat-intro {
     width: 100%;
     height: auto;
-    max-height: 100%;
-    dock: top;
-    align-horizontal: center;
-    overflow-y: hidden;
+    padding: 1 2;
+}
+
+#chat-empty {
+    width: 100%;
+    color: $ink;
+    text-style: none;
 }
 
 #chat-scroll {
     width: 100%;
     height: 1fr;
-    background: $surface;
-    color: $ink;
-    padding: 1 1;
-    overflow-y: auto;
+    layout: vertical;
+    padding: 0 1;
 }
 
-/* Empty state: fills the void until the first question is asked. */
-#chat-empty {
+/* --- Message Cards: Diseño limpio y con aire ------------------------------ */
+
+.message-header-bar {
+    width: 100%;
+    height: 1;
+    layout: horizontal;
+    margin-bottom: 0;
+}
+
+.message-sender-name {
     width: 1fr;
-    max-width: 72%;
-    height: auto;
-    color: $ink-dim;
-    background: $surface;
-    text-align: left;
-    text-style: none;
-    padding: 3 0 1 0;
+    color: $brand-bright;
+    text-style: bold;
 }
 
-/* ==========================================================================
-   Estilo de mensajes tipo Claude / Modern Prompt (como en la foto de referencia)
-   ========================================================================== */
+.assistant-name {
+    color: $accent;
+}
 
-/* 1. Tarjeta de Usuario:
-      - Borde grueso a la izquierda con el color primario/violeta
+.message-timestamp {
+    width: auto;
+    color: $ink-faint;
+    text-style: none;
+    text-align: right;
+}
+
+/* 1. Tarjeta del Usuario:
+      - Borde izquierdo primario grueso
       - Fondo panel sutil
       - Espaciado interior y superior
 */
@@ -74,6 +79,7 @@
     width: 100%;
     color: $ink;
     text-style: none;
+    margin-top: 0;
 }
 
 /* 2. Tarjeta del Asistente:
@@ -102,6 +108,7 @@
     color: $ink;
     background: transparent;
     padding: 0;
+    margin-top: 0;
 }
 
 /* In-flight feedback. Sits under the log so it never shifts the transcript */
@@ -111,53 +118,4 @@
     color: $brand;
     text-style: none;
     padding: 0 0 1 0;
-}
-
-/* --- Responsive ----------------------------------------------------------- */
-
-#main.narrow #chat {
-    margin-right: 0;
-}
-
-#main.narrow #chat-empty {
-    max-width: 100%;
-    padding: 1 0 0 0;
-}
-
-#main.narrow .user-card {
-    padding: 1 1;
-    margin-left: 0;
-    margin-right: 0;
-}
-
-#main.narrow .assistant-card {
-    padding: 0 1;
-}
-
-#main.short #chat {
-    padding: 0;
-}
-
-#main.short #chat-empty {
-    padding: 0;
-}
-
-#main.short .user-card {
-    margin-top: 0;
-    margin-bottom: 1;
-    padding: 0 1;
-}
-
-#main.short .assistant-card {
-    margin-bottom: 1;
-}
-
-/* Too little room for the intro to be read */
-#main.tiny #chat-intro {
-    display: none;
-}
-
-#main.micro #chat {
-    border: none;
-    padding: 0;
 }

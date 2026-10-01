@@ -20,7 +20,7 @@ class ChatHistoryModal(ModalScreen[str | None]):
     }
 
     #history-dialog {
-        width: 78;
+        width: 84;
         max-width: 90%;
         height: 24;
         max-height: 85%;
@@ -81,7 +81,7 @@ class ChatHistoryModal(ModalScreen[str | None]):
 
     def on_mount(self) -> None:
         table = self.query_one("#history-table", DataTable)
-        table.add_columns("Estado", "Título", "Última actividad")
+        table.add_columns("Estado", "Título", "Modelo", "Última actividad")
         self._refresh_sessions()
 
     def _refresh_sessions(self) -> None:
@@ -93,7 +93,8 @@ class ChatHistoryModal(ModalScreen[str | None]):
             is_active = "✦ Activo" if s.id == self.current_session_id else ""
             # Format timestamp nicely (YYYY-MM-DD HH:MM)
             updated_display = s.updated_at[:16].replace("T", " ")
-            table.add_row(is_active, s.title, updated_display, key=s.id)
+            model_display = getattr(s, "model", "gemini-2.5-flash")
+            table.add_row(is_active, s.title, model_display, updated_display, key=s.id)
 
     def _get_selected_session_id(self) -> str | None:
         table = self.query_one("#history-table", DataTable)
@@ -117,8 +118,8 @@ class ChatHistoryModal(ModalScreen[str | None]):
 
     @on(Button.Pressed, "#btn-hist-new")
     def on_btn_new(self) -> None:
-        new_sess = self.db.create_session("Conversación " + str(len(self.sessions) + 1))
-        self.dismiss(new_sess.id)
+        # Return special signal to create a clean deferred chat in the UI
+        self.dismiss("__NEW_CHAT__")
 
     @on(Button.Pressed, "#btn-hist-delete")
     def on_btn_delete(self) -> None:

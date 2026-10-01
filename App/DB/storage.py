@@ -3,7 +3,7 @@
 Uses a normalized SQLite database completely separate from the vectorstore/Chroma.
 Provides clean, typed, thread-safe access to:
   - Key-value configuration settings (e.g. current vault directory, active session).
-  - Normalized chat conversations and messages.
+  - Normalized chat conversations (with model metadata) and messages (with timestamp/hora).
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ import uuid
 # Base path for application SQLite storage
 DB_DIR = Path(__file__).resolve().parent
 DB_FILE = DB_DIR / "app_data.sqlite"
-DEFAULT_VAULT_PATH = "/home/alerrsi/Documents"
+DEFAULT_VAULT_PATH = "/home/alerrsi/Documents/Obsidian"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 _LOCK = threading.RLock()
 
@@ -39,6 +40,7 @@ class MessageRecord:
 class ChatSession:
     id: str
     title: str
+    model: str
     created_at: str
     updated_at: str
 
@@ -86,18 +88,28 @@ class AppDatabase:
             )
 
             # 2. Chat sessions table (1:N relationship with messages)
+            # Normalizada con id, nombre/title, modelo usado, created_at, updated_at
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
+                    model TEXT NOT NULL DEFAULT 'gemini-2.5-flash',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
             )
 
-            # 3. Chat messages table
+            # Migration: Ensure model column exists if table was created previously without it
+            cursor = conn.execute("PRAGMA table_info(chat_sessions);")
+            columns = [col["name"] for col in cursor.fetchall()]
+            if "model" not in columns:
+                conn.execute(
+                    f"ALTER TABLE chat_sessions ADD COLUMN model TEXT NOT NULL DEFAULT '{DEFAULT_MODEL}';"
+                )
+
+            # 3. Chat messages table: normalizada con id, session_id, sender, content, thought, created_at (hora)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -168,46 +180,70 @@ class AppDatabase:
 
     # --- Chat Sessions & Messages API ---------------------------------------
 
-    def get_or_create_default_session(self) -> ChatSession:
-        """Returns the most recent session or creates a new one."""
+    def get_most_recent_session(self) -> ChatSession | None:
+        """Returns the most recent persisted session, or None if no sessions exist."""
         with _LOCK, self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT 1;"
+                "SELECT id, title, model, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT 1;"
             )
             row = cursor.fetchone()
             if row is not None:
                 return ChatSession(
                     id=row["id"],
                     title=row["title"],
+                    model=row["model"],
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
+        return None
 
+    def get_or_create_default_session(self) -> ChatSession:
+        """Returns the most recent persisted session or creates an initial one."""
+        session = self.get_most_recent_session()
+        if session is not None:
+            return session
         return self.create_session("Conversación Inicial")
 
-    def create_session(self, title: str = "Nueva Conversación") -> ChatSession:
-        session_id = str(uuid.uuid4())
+    def create_session(
+        self,
+        title: str = "Nueva Conversación",
+        model: str = DEFAULT_MODEL,
+        session_id: str | None = None,
+    ) -> ChatSession:
+        """Explicitly saves a new chat session to SQLite with id, title, and model."""
+        sess_id = session_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         with _LOCK, self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO chat_sessions (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?);
+                INSERT INTO chat_sessions (id, title, model, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    model = excluded.model,
+                    updated_at = excluded.updated_at;
                 """,
-                (session_id, title, now, now),
+                (sess_id, title, model, now, now),
             )
             conn.commit()
-        return ChatSession(id=session_id, title=title, created_at=now, updated_at=now)
+        return ChatSession(id=sess_id, title=title, model=model, created_at=now, updated_at=now)
+
+    def session_exists(self, session_id: str) -> bool:
+        """Checks if a session is currently stored in SQLite."""
+        with _LOCK, self._get_connection() as conn:
+            cursor = conn.execute("SELECT 1 FROM chat_sessions WHERE id = ?;", (session_id,))
+            return cursor.fetchone() is not None
 
     def list_sessions(self) -> list[ChatSession]:
         with _LOCK, self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC;"
+                "SELECT id, title, model, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC;"
             )
             return [
                 ChatSession(
                     id=row["id"],
                     title=row["title"],
+                    model=row["model"],
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -220,9 +256,10 @@ class AppDatabase:
         sender: str,
         content: str,
         thought: str | None = None,
+        created_at: str | None = None,
     ) -> MessageRecord:
         msg_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+        now = created_at or datetime.now(timezone.utc).isoformat()
         with _LOCK, self._get_connection() as conn:
             conn.execute(
                 """
