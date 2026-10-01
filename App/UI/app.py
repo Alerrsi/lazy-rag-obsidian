@@ -10,6 +10,7 @@ from textual.worker import WorkerState
 from .components.prompt.SearchBarView import SearchBarView
 from .components.filemanager.FileManagerView import FileManagerView
 from .components.filemanager.VaultModal import VaultModal
+from .components.filemanager.NotePreviewModal import NotePreviewModal
 from .components.chat.ChatView import ChatView
 from .theme import LAZY_OBSIDIAN
 from App.RAG.Chain import Chain
@@ -60,6 +61,7 @@ class Myapp(App):
         "CSS/FileManagerView.tcss",
         "CSS/SearchBar.tcss",
         "CSS/VaultModal.tcss",
+        "CSS/NotePreviewModal.tcss",
     ]
 
     def compose(self) -> ComposeResult:
@@ -111,6 +113,23 @@ class Myapp(App):
     def _on_vault_modal_result(self, new_path: str | None) -> None:
         if new_path:
             self.change_vault_path(new_path)
+        self.query_one("#message", Input).focus()
+
+    @on(FileManagerView.FileSelected)
+    def on_file_selected(self, message: FileManagerView.FileSelected) -> None:
+        """Handles file selection from the tree and previews markdown files in a modal."""
+        file_path = message.path
+        if file_path.suffix.lower() == ".md":
+            self.push_screen(NotePreviewModal(str(file_path)), self._on_note_modal_closed)
+        else:
+            self.notify(
+                f"El archivo '{file_path.name}' no es Markdown (.md)",
+                title="Vista previa no soportada",
+                severity="warning",
+            )
+
+    def _on_note_modal_closed(self, result: None = None) -> None:
+        """Restore focus to the search input when closing the preview modal."""
         self.query_one("#message", Input).focus()
 
     def change_vault_path(self, new_path: str) -> None:

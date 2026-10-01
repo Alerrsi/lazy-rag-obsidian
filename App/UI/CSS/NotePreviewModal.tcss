@@ -1,0 +1,115 @@
+/* ==========================================================================
+   Note Preview Modal — Markdown file viewer popup dialog
+   ========================================================================== */
+
+NotePreviewModal {
+    align: center middle;
+    background: rgba(0, 0, 0, 0.80);
+}
+
+#note-modal-dialog {
+    width: 90%;
+    max-width: 120;
+    height: 88%;
+    max-height: 45;
+    border: round $brand;
+    background: $surface;
+    padding: 1 2;
+    layout: vertical;
+}
+
+#note-modal-header {
+    width: 100%;
+    height: 3;
+    layout: horizontal;
+    align: left middle;
+    border-bottom: solid $line;
+    padding-bottom: 0;
+    margin-bottom: 1;
+}
+
+#note-modal-header-titles {
+    width: 1fr;
+    height: 100%;
+    layout: vertical;
+}
+
+#note-modal-title {
+    color: $brand-bright;
+    text-style: bold;
+    width: 100%;
+}
+
+#note-modal-subtitle {
+    color: $ink-dim;
+    width: 100%;
+}
+
+#btn-note-modal-close {
+    width: auto;
+    height: 1;
+    min-width: 11;
+    background: $panel;
+    color: $ink-dim;
+    border: none;
+}
+
+#btn-note-modal-close:hover {
+    background: $error;
+    color: $foreground;
+}
+
+#note-modal-body {
+    width: 100%;
+    height: 1fr;
+    background: $panel;
+    border: tall $line-soft;
+    padding: 0 1;
+}
+
+#note-modal-viewer {
+    width: 100%;
+    height: 100%;
+    background: $panel;
+}
+
+#note-modal-footer {
+    width: 100%;
+    height: 2;
+    layout: horizontal;
+    align: left middle;
+    margin-top: 1;
+}
+
+#note-modal-hints {
+    width: 1fr;
+    color: $ink-faint;
+}
+
+#note-modal-buttons {
+    width: auto;
+    height: 1;
+    layout: horizontal;
+}
+
+#btn-note-modal-toc {
+    margin-right: 1;
+    background: $panel;
+    color: $ink;
+    border: none;
+}
+
+#btn-note-modal-toc:hover {
+    background: $boost;
+    color: $brand-bright;
+}
+
+#btn-note-modal-bottom-close {
+    background: $brand;
+    color: $foreground;
+    border: none;
+}
+
+#btn-note-modal-bottom-close:hover {
+    background: $brand-bright;
+}

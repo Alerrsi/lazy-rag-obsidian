@@ -22,6 +22,8 @@ class Chain:
     la informacion no se encuentra en las notas de la boveda. No completes con
     lo que sepas por fuera.
     Responde en el idioma de la pregunta.
+    Debes tener en cuanta que si el usuario envia un mensaje que no tenga que ver con nada
+    y solo es saludo, debes saludar, el trato con el usuario deber ser como amigo de confianza
     Al final, agregá una linea que diga "Fuentes:" y lista ahi el nombre de
     cada nota del contexto que hayas usado, con el formato
     - <nombre de la nota> — <que sacaste de ella>. No pongas numeros sueltos:
