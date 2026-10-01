@@ -49,12 +49,14 @@ class Myapp(App):
 
     BINDINGS = [
         Binding("ctrl+o", "open_change_vault", "Cambiar bóveda", show=True),
+        Binding("ctrl+b", "toggle_sidebar", "Ver/Ocultar archivos", show=True),
     ]
 
     def __init__(self) -> None:
         super().__init__()
         self.chain = Chain()
         self._active_ask = None
+        self._sidebar_visible = True
         self.register_theme(LAZY_OBSIDIAN)
         self.theme = LAZY_OBSIDIAN.name
 
@@ -72,7 +74,7 @@ class Myapp(App):
             with Horizontal(id="header"):
                 yield Label("LAZY OBSIDIAN", id="brand")
                 yield Label("tu bóveda, consultable desde la terminal", id="tagline")
-                yield Label("enter enviar · ctrl+o cambiar bóveda · tab paneles", id="key-hints")
+                yield Label("enter enviar · ctrl+b archivos · ctrl+o cambiar bóveda", id="key-hints")
             with Horizontal(id="home"):
                 yield ChatView(id="chat")
                 yield HorizontalSplitter()
@@ -105,6 +107,20 @@ class Myapp(App):
             prompt.placeholder = next(
                 text for minimum, text in PROMPTS if width >= minimum
             )
+
+    def action_toggle_sidebar(self) -> None:
+        """Toggles the visibility of the files menu / sidebar and its splitter."""
+        sidebar = self.query_one("#sidebar", FileManagerView)
+        splitter = self.query_one(HorizontalSplitter)
+        self._sidebar_visible = not self._sidebar_visible
+        sidebar.display = self._sidebar_visible
+        splitter.display = self._sidebar_visible
+        state_str = "mostrado" if self._sidebar_visible else "oculto"
+        self.notify(f"Panel de notas {state_str} (Ctrl+B)", title="Archivos", severity="information")
+
+    @on(FileManagerView.ToggleSidebarRequested)
+    def on_toggle_sidebar_requested(self) -> None:
+        self.action_toggle_sidebar()
 
     @on(Button.Pressed, "#btn-change-vault")
     def on_btn_change_vault(self) -> None:

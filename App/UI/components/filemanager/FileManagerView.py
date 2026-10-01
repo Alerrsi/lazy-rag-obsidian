@@ -1,5 +1,7 @@
 from pathlib import Path
 import os
+from textual.app import ComposeResult
+from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, DirectoryTree
@@ -18,6 +20,10 @@ class FileManagerView(Widget):
             super().__init__()
             self.path = path
 
+    class ToggleSidebarRequested(Message):
+        """Dispatched when user clicks the hide/collapse button."""
+        pass
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.border_title = "ARCHIVOS"
@@ -27,9 +33,16 @@ class FileManagerView(Widget):
         folder_name = os.path.basename(os.path.abspath(path))
         self.border_subtitle = folder_name or path
 
-    def compose(self):
-        yield Button("📁 Cambiar [Ctrl+O]", id="btn-change-vault")
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="sidebar-top-bar"):
+            yield Button("📁 Cambiar [Ctrl+O]", id="btn-change-vault")
+            yield Button("✕", id="btn-close-sidebar", tooltip="Ocultar menú [Ctrl+B]")
         yield DirectoryTree(path=VAULT_ROOT, id="vault-tree")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-close-sidebar":
+            event.stop()
+            self.post_message(self.ToggleSidebarRequested())
 
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         """Propagate file selection event to the parent app."""

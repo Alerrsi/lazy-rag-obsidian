@@ -13,16 +13,19 @@ class HorizontalSplitter(Widget):
         height: 1fr;
         background: transparent;
         color: $line;
+        pointer: ew-resize;
     }
 
     HorizontalSplitter:hover {
         background: $brand 25%;
         color: $brand-bright;
+        pointer: ew-resize;
     }
 
     HorizontalSplitter.-dragging {
         background: $brand 50%;
         color: $brand-bright;
+        pointer: ew-resize;
     }
     """
 
