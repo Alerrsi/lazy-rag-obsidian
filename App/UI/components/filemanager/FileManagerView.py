@@ -5,13 +5,10 @@ from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, DirectoryTree
-
-VAULT_ROOT = "/home/alerrsi/Documents"
+from App.DB.storage import AppDatabase
 
 
 class FileManagerView(Widget):
-
-    VAULT_ROOT = VAULT_ROOT
 
     class FileSelected(Message):
         """Dispatched when a file node is selected in the directory tree."""
@@ -27,7 +24,13 @@ class FileManagerView(Widget):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.border_title = "ARCHIVOS"
-        self._update_subtitle(VAULT_ROOT)
+        # Always fetch current vault path from SQLite
+        self.vault_root = AppDatabase.get_instance().get_vault_path()
+        self._update_subtitle(self.vault_root)
+
+    @property
+    def VAULT_ROOT(self) -> str:
+        return self.vault_root
 
     def _update_subtitle(self, path: str) -> None:
         folder_name = os.path.basename(os.path.abspath(path))
@@ -37,7 +40,7 @@ class FileManagerView(Widget):
         with Horizontal(id="sidebar-top-bar"):
             yield Button("📁 Cambiar [Ctrl+O]", id="btn-change-vault")
             yield Button("✕", id="btn-close-sidebar", tooltip="Ocultar menú [Ctrl+B]")
-        yield DirectoryTree(path=VAULT_ROOT, id="vault-tree")
+        yield DirectoryTree(path=self.vault_root, id="vault-tree")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-close-sidebar":
@@ -50,9 +53,7 @@ class FileManagerView(Widget):
         self.post_message(self.FileSelected(event.path))
 
     def update_vault_root(self, new_path: str) -> None:
-        global VAULT_ROOT
-        VAULT_ROOT = new_path
-        FileManagerView.VAULT_ROOT = new_path
+        self.vault_root = new_path
         self._update_subtitle(new_path)
         tree = self.query_one("#vault-tree", DirectoryTree)
         tree.path = new_path

@@ -1,6 +1,7 @@
 """Interactive divider widget that enables horizontal resizing between panes with mouse drag."""
 
-from textual.events import MouseDown, MouseMove, MouseUp
+import sys
+from textual.events import Enter, Leave, MouseDown, MouseMove, MouseUp
 from textual.widget import Widget
 
 
@@ -37,11 +38,31 @@ class HorizontalSplitter(Widget):
         # Subtle dotted or vertical line indicator
         return "│"
 
+    @staticmethod
+    def _set_terminal_mouse_cursor(cursor_shape: str) -> None:
+        """Emits standard OSC 22 escape sequence to set the hardware terminal mouse cursor shape."""
+        try:
+            # OSC 22 ; <shape> ST  (ESC ] 22 ; <shape> ESC \)
+            sys.stdout.write(f"\x1b]22;{cursor_shape}\x1b\\")
+            sys.stdout.flush()
+        except OSError:
+            pass
+
+    def on_enter(self, event: Enter) -> None:
+        """When mouse enters the splitter, change cursor to ew-resize via OSC 22."""
+        self._set_terminal_mouse_cursor("ew-resize")
+
+    def on_leave(self, event: Leave) -> None:
+        """When mouse leaves the splitter, restore cursor to default unless currently dragging."""
+        if not self._dragging:
+            self._set_terminal_mouse_cursor("default")
+
     def on_mouse_down(self, event: MouseDown) -> None:
         if event.button == 1:  # Left click
             self.capture_mouse()
             self._dragging = True
             self.add_class("-dragging")
+            self._set_terminal_mouse_cursor("ew-resize")
             event.stop()
 
     def on_mouse_move(self, event: MouseMove) -> None:
@@ -65,4 +86,5 @@ class HorizontalSplitter(Widget):
             self.release_mouse()
             self._dragging = False
             self.remove_class("-dragging")
+            self._set_terminal_mouse_cursor("default")
             event.stop()

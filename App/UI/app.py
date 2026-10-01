@@ -4,6 +4,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
+from textual.notifications import SeverityLevel
 from textual.widgets import Button, Input, Label
 from textual.worker import WorkerState
 
@@ -14,6 +15,7 @@ from .components.filemanager.NotePreviewModal import NotePreviewModal
 from .components.filemanager.HorizontalSplitter import HorizontalSplitter
 from .components.chat.ChatView import ChatView
 from .theme import LAZY_OBSIDIAN
+from App.DB.storage import AppDatabase
 from App.RAG.Chain import Chain
 from App.RAG.VectorialTransfer import VectorialTransfer
 
@@ -54,6 +56,8 @@ class Myapp(App):
 
     def __init__(self) -> None:
         super().__init__()
+        self.db = AppDatabase.get_instance()
+        self.current_session = self.db.get_or_create_default_session()
         self.chain = Chain()
         self._active_ask = None
         self._sidebar_visible = True
@@ -86,6 +90,12 @@ class Myapp(App):
         chat = self.query_one(ChatView)
         barra = self.query_one(SearchBarView)
         barra.on_send = chat.on_input_submitted
+
+        # Load persisted messages from SQLite for current session
+        saved_messages = self.db.get_messages(self.current_session.id)
+        if saved_messages:
+            chat.load_history(saved_messages)
+
         self._apply_layout_mode(self.size.width, self.size.height)
         # The prompt is the reason the app is open: start there instead of on
         # the first focusable widget in DOM order (the log).
@@ -108,6 +118,32 @@ class Myapp(App):
                 text for minimum, text in PROMPTS if width >= minimum
             )
 
+    def notify(
+        self,
+        message: str,
+        *,
+        title: str = "",
+        severity: SeverityLevel = "information",
+        timeout: float | None = None,
+        markup: bool = True,
+    ) -> None:
+        """Emits a notification only if an identical notification is not currently active."""
+        for notif in self._notifications:
+            if (
+                not notif.has_expired
+                and notif.message == message
+                and notif.title == title
+                and notif.severity == severity
+            ):
+                return
+        super().notify(
+            message,
+            title=title,
+            severity=severity,
+            timeout=timeout,
+            markup=markup,
+        )
+
     def action_toggle_sidebar(self) -> None:
         """Toggles the visibility of the files menu / sidebar and its splitter."""
         sidebar = self.query_one("#sidebar", FileManagerView)
@@ -127,7 +163,7 @@ class Myapp(App):
         self.action_open_change_vault()
 
     def action_open_change_vault(self) -> None:
-        current_path = getattr(VectorialTransfer, "OBSIDIAN_PATH", FileManagerView.VAULT_ROOT)
+        current_path = self.db.get_vault_path()
         self.push_screen(VaultModal(current_path=current_path), self._on_vault_modal_result)
 
     def _on_vault_modal_result(self, new_path: str | None) -> None:
@@ -155,14 +191,14 @@ class Myapp(App):
     def change_vault_path(self, new_path: str) -> None:
         abs_path = os.path.abspath(os.path.expanduser(new_path))
 
-        # 1. Cambiar OBSIDIAN_PATH de la clase VectorialTransfer y en la instancia
-        VectorialTransfer.OBSIDIAN_PATH = abs_path
+        # 1. Guardar persistentemente en la base de datos SQLite
+        self.db.set_vault_path(abs_path)
+
+        # 2. Actualizar VectorialTransfer y Chain
+        VectorialTransfer.set_obsidian_path(abs_path)
         self.chain.use_vault(abs_path)
 
-        # 2. Cambiar VAULT_ROOT dentro de FileManagerView
-        import App.UI.components.filemanager.FileManagerView as fmv_module
-        fmv_module.VAULT_ROOT = abs_path
-        FileManagerView.VAULT_ROOT = abs_path
+        # 3. Actualizar el FileManagerView
         file_manager = self.query_one(FileManagerView)
         file_manager.update_vault_root(abs_path)
 
@@ -199,6 +235,14 @@ class Myapp(App):
 
         barra = self.query_one(SearchBarView)
         barra.send(entrada)
+
+        # Persistir mensaje de usuario en SQLite
+        self.db.add_message(
+            session_id=self.current_session.id,
+            sender="user",
+            content=entrada,
+        )
+
         self._ask(entrada)
 
     def _ask(self, text: str) -> None:
@@ -240,13 +284,24 @@ class Myapp(App):
 
         if worker.state == WorkerState.SUCCESS:
             self._set_busy(False)
-            self.query_one("#chat", ChatView).add_assistant_message(worker.result)
+            answer = worker.result
+            self.query_one("#chat", ChatView).add_assistant_message(answer)
+            # Persistir respuesta del asistente en SQLite
+            self.db.add_message(
+                session_id=self.current_session.id,
+                sender="assistant",
+                content=answer,
+            )
             self.query_one("#message", Input).focus()
         elif worker.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._set_busy(False)
             if worker.state == WorkerState.ERROR:
-                self.query_one("#chat", ChatView).add_assistant_message(
-                    f"⚠️ No pude responder: {worker.error}"
+                err_msg = f"⚠️ No pude responder: {worker.error}"
+                self.query_one("#chat", ChatView).add_assistant_message(err_msg)
+                self.db.add_message(
+                    session_id=self.current_session.id,
+                    sender="assistant",
+                    content=err_msg,
                 )
             self.query_one("#message", Input).focus()
 

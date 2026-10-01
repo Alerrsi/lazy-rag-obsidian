@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .Embeddings import OllamaEmbeddings
+from App.DB.storage import AppDatabase
 
 
 # chromadb construye su cliente global con un dict sin lock: dos hilos que
@@ -47,12 +48,15 @@ class IndexStats:
 
 
 class VectorialTransfer():
-    OBSIDIAN_PATH = "/home/alerrsi/Documents/Obsidian/"
     DATABASE = "./App/DB/Chroma/"
 
     def __init__(self, obsidian_path: str = None) -> None:
+        # Prioriza la ruta configurada en la base de datos SQLite
         if obsidian_path is not None:
             self.OBSIDIAN_PATH = obsidian_path
+        else:
+            self.OBSIDIAN_PATH = AppDatabase.get_instance().get_vault_path()
+
         self._embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
         self._splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,

@@ -67,6 +67,26 @@ class ChatView(Widget):
         scroll.mount(card)
         card.scroll_visible()
 
+    def clear_messages(self) -> None:
+        """Removes all mounted message cards."""
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
+        for child in list(scroll.children):
+            child.remove()
+        empty = self.query_one("#chat-empty")
+        empty.display = True
+
+    def load_history(self, messages) -> None:
+        """Populates the chat view with persisted historical messages."""
+        if not messages:
+            return
+        self._reveal_conversation()
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
+        for msg in messages:
+            if msg.sender == "user":
+                scroll.mount(UserMessageCard(text=msg.content))
+            else:
+                scroll.mount(AssistantMessageCard(text=msg.content, thought=msg.thought))
+
     def set_status(self, text: str | None) -> None:
         """Feedback while a question is in flight or index update."""
         status = self.query_one("#chat-status", Static)
