@@ -17,14 +17,21 @@ ChatView {
 
 #chat-intro {
     width: 100%;
-    height: auto;
+    height: 1fr;
+    align: center middle;
+    content-align: center middle;
     padding: 1 2;
+    overflow-y: hidden;
 }
 
 #chat-empty {
-    width: 100%;
+    width: auto;
+    max-width: 95%;
+    height: auto;
+    text-align: center;
     color: $ink;
-    text-style: none;
+    background: transparent;
+    padding: 0 1;
 }
 
 #chat-scroll {

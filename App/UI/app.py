@@ -66,20 +66,17 @@ class Myapp(App):
     def __init__(self) -> None:
         super().__init__()
         self.db = AppDatabase.get_instance()
-        # Look for most recent session or create an unpersisted new chat
-        recent = self.db.get_most_recent_session()
-        if recent is not None:
-            self.current_session = recent
-            self._session_is_persisted = True
-        else:
-            self.current_session = ChatSession(
-                id=str(uuid.uuid4()),
-                title="Nueva Conversación",
-                model="gemini-2.5-flash",
-                created_at=datetime.now(timezone.utc).isoformat(),
-                updated_at=datetime.now(timezone.utc).isoformat(),
-            )
-            self._session_is_persisted = False
+        # Al abrir la aplicación, iniciamos una nueva sesión en memoria (unpersisted)
+        # para mostrar el mensaje de bienvenida y preservar chats previos en el historial
+        now = datetime.now(timezone.utc).isoformat()
+        self.current_session = ChatSession(
+            id=str(uuid.uuid4()),
+            title="Nueva Conversación",
+            model="gemini-2.5-flash",
+            created_at=now,
+            updated_at=now,
+        )
+        self._session_is_persisted = False
 
         self.chain = Chain()
         self._active_ask = None
@@ -116,9 +113,8 @@ class Myapp(App):
         barra = self.query_one(SearchBarView)
         barra.on_send = chat.on_input_submitted
 
-        # Load persisted messages from SQLite for current session if already persisted
-        if self._session_is_persisted:
-            self._load_active_session_messages()
+        # Al abrir la app, siempre se muestra el mensaje de bienvenida centrado
+        chat.clear_messages()
 
         self._apply_layout_mode(self.size.width, self.size.height)
         # The prompt is the reason the app is open: start there instead of on
@@ -350,7 +346,6 @@ class Myapp(App):
 
         # Si es un nuevo chat y aún no está guardado en SQLite, guardarlo ahora con su primer mensaje
         if not self._session_is_persisted:
-            # Generar un título descriptivo basado en las primeras palabras del mensaje
             words = entrada.split()
             first_words = " ".join(words[:5])
             title = first_words[:35] + ("…" if len(entrada) > 35 else "")
@@ -412,16 +407,12 @@ class Myapp(App):
         open_index()
 
     def on_worker_state_changed(self, event) -> None:
-        # Unico mensaje de estado de los workers: se llama Worker.StateChanged y
-        # lleva namespace "worker", asi que el handler va con el prefijo entero.
         worker = event.worker
 
         if worker.group == "index":
             self._report_index(worker)
             return
 
-        # exclusive=True cancela la pregunta anterior al mandar otra: su
-        # CANCELLED no debe apagar el spinner de la que esta corriendo.
         if worker is not self._active_ask:
             return
 
@@ -429,7 +420,6 @@ class Myapp(App):
             self._set_busy(False)
             answer = worker.result
             now_iso = datetime.now(timezone.utc).isoformat()
-            # Persistir respuesta del asistente en SQLite
             self.db.add_message(
                 session_id=self.current_session.id,
                 sender="assistant",

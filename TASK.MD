@@ -21,6 +21,13 @@
     - [x] remitente
     - [x] mensaje (texto plano)
     - [x] hora (mostrar en el chat)
-- []Al iniciar un nuevo chat se debe un mensaje de bienvenida dependiendo de la hora del dia, y personalizarlo, no se debe motrar un supuesto mensaje enviado por el usuario: 
-    - El mensaje debe estar escrito con letra grande en el centro del chat 
-    - Cuando el usuairo escriba un mensaje se de quitar ese mensaje de bienvenida
+- [x] Al iniciar un nuevo chat se debe un mensaje de bienvenida dependiendo de la hora del dia, y personalizarlo, no se debe mostrar un supuesto mensaje enviado por el usuario: 
+  - [x] El mensaje debe estar escrito con letra grande en el centro del chat 
+  - [x] Cuando el usuario escriba un mensaje se debe quitar ese mensaje de bienvenida
+  - [x] Al abrir la aplicación tambien se debe mostrar el mensaje
+  - [x] El mensaje al estar en otro tamaño la ventana deber redimensionarse y adaptarse para que siempre se vea bien
+- [ ] en el menu de archivos el usuario debe poder seleccionar que archivos puede usar para que el agente le responda:
+  - EL usuario debe ver un marcador de ticket al costado derecho de cada archivo.md 
+  - al hacer click el arhcivo se usara como fuente de información unica
+  - pueden haber mas de un archivo marcado como fuente
+  - si no esta ninguno marcado se deben usar todas las fuentes del directorio

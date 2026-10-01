@@ -1,14 +1,58 @@
 from datetime import datetime, timezone
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Resize
 from textual.widget import Widget
 from textual.widgets import Markdown, Static
 
-EMPTY_STATE = """[b]Tu bóveda está entera acá.[/b]
 
-Preguntá en tus palabras lo que recordás a medias — "esa receta de pasta que anoté en algún lado" — y te devuelvo la nota donde lo escribiste.
+def get_welcome_message(width: int = 100, height: int = 30) -> str:
+    """Returns a responsive, personalized greeting based on time of day and terminal dimensions."""
+    current_hour = datetime.now().hour
+    if 5 <= current_hour < 12:
+        saludo = "¡Buenos días!"
+        icono = "🌅"
+        subtitulo = "¿Qué notas deseas explorar o repasar esta mañana?"
+        subtitulo_short = "¿Qué notas exploramos esta mañana?"
+    elif 12 <= current_hour < 19:
+        saludo = "¡Buenas tardes!"
+        icono = "☀️"
+        subtitulo = "¿En qué te puedo ayudar hoy con tu bóveda de notas?"
+        subtitulo_short = "¿En qué te ayudo hoy con tus notas?"
+    elif 19 <= current_hour < 24:
+        saludo = "¡Buenas noches!"
+        icono = "🌙"
+        subtitulo = "¿Qué ideas o reflexiones de hoy quieres consultar?"
+        subtitulo_short = "¿Qué ideas consultamos hoy?"
+    else:
+        saludo = "¡Hola, trasnochador!"
+        icono = "✨"
+        subtitulo = "La noche es buena para investigar. ¿Qué buscamos en tus notas?"
+        subtitulo_short = "¿Qué buscamos en tus notas?"
 
-[dim]No busco en internet. Busco en tus notas.[/dim]"""
+    # Adaptación responsiva según el ancho y alto del contenedor
+    if width < 45 or height < 14:
+        # Modo ultra compacto (terminal micro o muy baja)
+        return (
+            f"[bold #bb9af7]{icono} {saludo}[/bold #bb9af7]\n"
+            f"[dim]{subtitulo_short}[/dim]"
+        )
+    elif width < 70 or height < 20:
+        # Modo intermedio/compacto
+        return (
+            f"[bold #bb9af7]{icono} {saludo}[/bold #bb9af7]\n\n"
+            f"[bold]{subtitulo_short}[/bold]\n\n"
+            f"[dim]Pregunta en lenguaje natural abajo.[/dim]"
+        )
+    else:
+        # Modo normal y ancho: Arte ASCII o tipografía espaciosa
+        return (
+            f"[bold #bb9af7]╭───────────────────────────────────────────────────╮[/bold #bb9af7]\n"
+            f"[bold #bb9af7]│                 {icono}  {saludo}                  │[/bold #bb9af7]\n"
+            f"[bold #bb9af7]╰───────────────────────────────────────────────────╯[/bold #bb9af7]\n\n"
+            f"[bold #7aa2f7]{subtitulo}[/bold #7aa2f7]\n\n"
+            f"[dim]Escribe tu pregunta abajo en tus propias palabras para buscar en tu bóveda.[/dim]"
+        )
 
 
 def _format_time(timestamp: str | None = None) -> str:
@@ -16,13 +60,11 @@ def _format_time(timestamp: str | None = None) -> str:
     if not timestamp:
         return datetime.now().strftime("%H:%M")
     try:
-        # If timestamp is ISO, parse and convert to local time
         dt = datetime.fromisoformat(timestamp)
         if dt.tzinfo is not None:
             dt = dt.astimezone()
         return dt.strftime("%H:%M")
     except Exception:
-        # Fallback substring if standard ISO format YYYY-MM-DDTHH:MM:SS
         if "T" in timestamp and len(timestamp) >= 16:
             return timestamp.split("T")[1][:5]
         return timestamp[:5]
@@ -84,10 +126,17 @@ class ChatView(Widget):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="messages"):
-            with Horizontal(id="chat-intro"):
-                yield Static(EMPTY_STATE, id="chat-empty")
+            with Vertical(id="chat-intro"):
+                yield Static(get_welcome_message(), id="chat-empty")
             yield VerticalScroll(id="chat-scroll")
             yield Static("", id="chat-status")
+
+    def on_resize(self, event: Resize) -> None:
+        """Adapts the welcome message reactively whenever the terminal or chat pane is resized."""
+        intro = self.query_one("#chat-intro", Vertical)
+        if intro.display:
+            empty = self.query_one("#chat-empty", Static)
+            empty.update(get_welcome_message(width=event.size.width, height=event.size.height))
 
     def on_input_submitted(self, text: str) -> None:
         if not text:
@@ -146,12 +195,16 @@ class ChatView(Widget):
         card.scroll_visible()
 
     def clear_messages(self) -> None:
-        """Removes all mounted message cards."""
+        """Removes all mounted message cards and shows updated personalized welcome banner."""
         scroll = self.query_one("#chat-scroll", VerticalScroll)
         for child in list(scroll.children):
             child.remove()
-        empty = self.query_one("#chat-empty")
-        empty.display = True
+        empty = self.query_one("#chat-empty", Static)
+        width = self.size.width or 100
+        height = self.size.height or 30
+        empty.update(get_welcome_message(width=width, height=height))
+        intro = self.query_one("#chat-intro", Vertical)
+        intro.display = True
 
     def load_history(self, messages, model_name: str = "gemini-2.5-flash") -> None:
         """Populates the chat view with persisted historical messages with timestamps."""
@@ -179,6 +232,6 @@ class ChatView(Widget):
         status.display = text is not None
 
     def _reveal_conversation(self) -> None:
-        empty = self.query_one("#chat-empty")
-        if empty.display:
-            empty.display = False
+        intro = self.query_one("#chat-intro", Vertical)
+        if intro.display:
+            intro.display = False
