@@ -11,4 +11,4 @@
 - [x] Base de datos SQLite diferente de las notas dentro de DB donde se almacenen configuraciones e historial de chats
   - [x] tabla especificas con chats y normalizada
   - [x] Configuraciones BASICAS como el directorio actual(modifica en el codigo para que tome la opción siempre de la base de datos)
-- [ ] Menu lateral desplegable con opción de ir a configuración e historial de chats
+- [x] Menu lateral desplegable con opción de ir a configuración e historial de chats

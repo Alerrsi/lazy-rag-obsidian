@@ -14,6 +14,9 @@ from .components.filemanager.VaultModal import VaultModal
 from .components.filemanager.NotePreviewModal import NotePreviewModal
 from .components.filemanager.HorizontalSplitter import HorizontalSplitter
 from .components.chat.ChatView import ChatView
+from .components.drawer.SideDrawerView import SideDrawerView
+from .components.history.ChatHistoryModal import ChatHistoryModal
+from .components.settings.SettingsModal import SettingsModal
 from .theme import LAZY_OBSIDIAN
 from App.DB.storage import AppDatabase
 from App.RAG.Chain import Chain
@@ -50,8 +53,11 @@ LAYOUT_MODES = (
 class Myapp(App):
 
     BINDINGS = [
-        Binding("ctrl+o", "open_change_vault", "Cambiar bóveda", show=True),
+        Binding("ctrl+m", "toggle_drawer", "Menú principal", show=True),
+        Binding("ctrl+h", "open_chat_history", "Historial chats", show=True),
+        Binding("ctrl+comma", "open_settings", "Configuración", show=False),
         Binding("ctrl+b", "toggle_sidebar", "Ver/Ocultar archivos", show=True),
+        Binding("ctrl+o", "open_change_vault", "Cambiar bóveda", show=True),
     ]
 
     def __init__(self) -> None:
@@ -76,10 +82,12 @@ class Myapp(App):
     def compose(self) -> ComposeResult:
         with Vertical(id="main"):
             with Horizontal(id="header"):
+                yield Button("☰", id="btn-open-drawer", tooltip="Menú principal [Ctrl+M]")
                 yield Label("LAZY OBSIDIAN", id="brand")
                 yield Label("tu bóveda, consultable desde la terminal", id="tagline")
-                yield Label("enter enviar · ctrl+b archivos · ctrl+o cambiar bóveda", id="key-hints")
+                yield Label("ctrl+m menú · enter enviar · ctrl+b archivos · ctrl+o bóveda", id="key-hints")
             with Horizontal(id="home"):
+                yield SideDrawerView(id="side-drawer")
                 yield ChatView(id="chat")
                 yield HorizontalSplitter()
                 yield FileManagerView(id="sidebar")
@@ -92,9 +100,7 @@ class Myapp(App):
         barra.on_send = chat.on_input_submitted
 
         # Load persisted messages from SQLite for current session
-        saved_messages = self.db.get_messages(self.current_session.id)
-        if saved_messages:
-            chat.load_history(saved_messages)
+        self._load_active_session_messages()
 
         self._apply_layout_mode(self.size.width, self.size.height)
         # The prompt is the reason the app is open: start there instead of on
@@ -103,6 +109,13 @@ class Myapp(App):
         # Abrir el indice en background: si la boveda cambio desde la ultima
         # corrida, la primera pregunta no tiene que pagar ese costo.
         self.warm_worker(self.chain.transfer.get_vectorstore)
+
+    def _load_active_session_messages(self) -> None:
+        chat = self.query_one(ChatView)
+        chat.clear_messages()
+        saved_messages = self.db.get_messages(self.current_session.id)
+        if saved_messages:
+            chat.load_history(saved_messages)
 
     def on_resize(self, event: Resize) -> None:
         self._apply_layout_mode(event.size.width, event.size.height)
@@ -143,6 +156,68 @@ class Myapp(App):
             timeout=timeout,
             markup=markup,
         )
+
+    # --- Drawer Actions & Handlers -------------------------------------------
+
+    def action_toggle_drawer(self) -> None:
+        drawer = self.query_one(SideDrawerView)
+        is_open = drawer.toggle()
+        state = "abierto" if is_open else "cerrado"
+        self.notify(f"Menú lateral {state} (Ctrl+M)", title="Menú", severity="information")
+
+    @on(Button.Pressed, "#btn-open-drawer")
+    def on_btn_open_drawer(self) -> None:
+        self.action_toggle_drawer()
+
+    @on(SideDrawerView.CloseDrawer)
+    def on_drawer_close_requested(self) -> None:
+        drawer = self.query_one(SideDrawerView)
+        drawer.close()
+
+    @on(SideDrawerView.OpenChatHistory)
+    def on_drawer_open_history(self) -> None:
+        self.query_one(SideDrawerView).close()
+        self.action_open_chat_history()
+
+    @on(SideDrawerView.OpenSettings)
+    def on_drawer_open_settings(self) -> None:
+        self.query_one(SideDrawerView).close()
+        self.action_open_settings()
+
+    @on(SideDrawerView.NewChatRequested)
+    def on_drawer_new_chat(self) -> None:
+        self.query_one(SideDrawerView).close()
+        new_sess = self.db.create_session("Conversación " + str(len(self.db.list_sessions()) + 1))
+        self.current_session = new_sess
+        self._load_active_session_messages()
+        self.notify(f"Iniciada {new_sess.title}", title="Nueva Conversación", severity="information")
+        self.query_one("#message", Input).focus()
+
+    def action_open_chat_history(self) -> None:
+        self.push_screen(
+            ChatHistoryModal(current_session_id=self.current_session.id),
+            self._on_chat_history_result,
+        )
+
+    def _on_chat_history_result(self, selected_session_id: str | None) -> None:
+        if selected_session_id and selected_session_id != self.current_session.id:
+            sessions = {s.id: s for s in self.db.list_sessions()}
+            if selected_session_id in sessions:
+                self.current_session = sessions[selected_session_id]
+                self._load_active_session_messages()
+                self.notify(f"Cargado: {self.current_session.title}", title="Chat Cambiado", severity="information")
+        self.query_one("#message", Input).focus()
+
+    def action_open_settings(self) -> None:
+        self.push_screen(SettingsModal(), self._on_settings_result)
+
+    def _on_settings_result(self, updated_settings: dict[str, str] | None) -> None:
+        if updated_settings and "vault_path" in updated_settings:
+            new_vault = updated_settings["vault_path"]
+            self.change_vault_path(new_vault)
+        self.query_one("#message", Input).focus()
+
+    # --- Sidebar (Vault tree) Actions ----------------------------------------
 
     def action_toggle_sidebar(self) -> None:
         """Toggles the visibility of the files menu / sidebar and its splitter."""
