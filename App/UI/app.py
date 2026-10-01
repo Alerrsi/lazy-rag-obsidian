@@ -17,17 +17,13 @@ from .components.filemanager.VaultModal import VaultModal
 from .components.filemanager.NotePreviewModal import NotePreviewModal
 from .components.filemanager.HorizontalSplitter import HorizontalSplitter
 from .components.chat.ChatView import ChatView
-from .components.drawer.SideDrawerView import SideDrawerView
-from .components.history.ChatHistoryModal import ChatHistoryModal
+from .components.drawer.SideDrawerView import SideDrawerView, PinContextMenuModal, ChatHistoryItem
 from .components.settings.SettingsModal import SettingsModal
 from .theme import LAZY_OBSIDIAN
 from App.DB.storage import AppDatabase, ChatSession
 from App.RAG.Chain import Chain
 from App.RAG.VectorialTransfer import VectorialTransfer
 
-# Breakpoints, in cells. The TUI is a fluid surface, so instead of relying on
-# percentages (which round to nothing on small terminals and overflow on large
-# ones) the layout switches modes and every size is driven by 1fr plus fixed wells.
 WIDE_WIDTH = 130
 COMPACT_WIDTH = 104
 NARROW_WIDTH = 76
@@ -35,8 +31,6 @@ MICRO_WIDTH = 52
 SHORT_HEIGHT = 20
 TINY_HEIGHT = 12
 
-# The prompt never truncates: it steps down through shorter invitations as the
-# terminal narrows, so the hint is never cut mid-word.
 PROMPTS = (
     (COMPACT_WIDTH, "Escribí tu pregunta sobre tus notas…"),
     (MICRO_WIDTH, "Escribí tu pregunta…"),
@@ -56,8 +50,7 @@ LAYOUT_MODES = (
 class Myapp(App):
 
     BINDINGS = [
-        Binding("ctrl+m", "toggle_drawer", "Menú principal", show=True),
-        Binding("ctrl+h", "open_chat_history", "Historial chats", show=True),
+        Binding("ctrl+m", "toggle_drawer", "Menú lateral / Historial", show=True),
         Binding("ctrl+comma", "open_settings", "Configuración", show=False),
         Binding("ctrl+b", "toggle_sidebar", "Ver/Ocultar archivos", show=True),
         Binding("ctrl+o", "open_change_vault", "Cambiar bóveda", show=True),
@@ -66,8 +59,6 @@ class Myapp(App):
     def __init__(self) -> None:
         super().__init__()
         self.db = AppDatabase.get_instance()
-        # Al abrir la aplicación, iniciamos una nueva sesión en memoria (unpersisted)
-        # para mostrar el mensaje de bienvenida y preservar chats previos en el historial
         now = datetime.now(timezone.utc).isoformat()
         self.current_session = ChatSession(
             id=str(uuid.uuid4()),
@@ -96,12 +87,12 @@ class Myapp(App):
     def compose(self) -> ComposeResult:
         with Vertical(id="main"):
             with Horizontal(id="header"):
-                yield Button("☰", id="btn-open-drawer", tooltip="Menú principal [Ctrl+M]")
+                yield Button("☰", id="btn-open-drawer", tooltip="Menú lateral [Ctrl+M]")
                 yield Label("LAZY OBSIDIAN", id="brand")
                 yield Label("tu bóveda, consultable desde la terminal", id="tagline")
-                yield Label("ctrl+m menú · enter enviar · ctrl+b archivos · ctrl+o bóveda", id="key-hints")
+                yield Label("ctrl+m menú lateral · enter enviar · ctrl+b archivos · ctrl+o bóveda", id="key-hints")
             with Horizontal(id="home"):
-                yield SideDrawerView(id="side-drawer")
+                yield SideDrawerView(current_session_id=self.current_session.id, id="side-drawer")
                 yield ChatView(id="chat")
                 yield HorizontalSplitter()
                 yield FileManagerView(id="sidebar")
@@ -117,11 +108,7 @@ class Myapp(App):
         chat.clear_messages()
 
         self._apply_layout_mode(self.size.width, self.size.height)
-        # The prompt is the reason the app is open: start there instead of on
-        # the first focusable widget in DOM order (the log).
         self.query_one("#message", Input).focus()
-        # Abrir el indice en background: si la boveda cambio desde la ultima
-        # corrida, la primera pregunta no tiene que pagar ese costo.
         self.warm_worker(self.chain.transfer.get_vectorstore)
 
     def _load_active_session_messages(self) -> None:
@@ -140,7 +127,6 @@ class Myapp(App):
         for main in self.query("#main"):
             for name, applies in LAYOUT_MODES:
                 main.set_class(applies(width, height), name)
-        # A resize can land before the tree is composed, hence the queries.
         for prompt in self.query("#message"):
             prompt.placeholder = next(
                 text for minimum, text in PROMPTS if width >= minimum
@@ -189,10 +175,44 @@ class Myapp(App):
         drawer = self.query_one(SideDrawerView)
         drawer.close()
 
-    @on(SideDrawerView.OpenChatHistory)
-    def on_drawer_open_history(self) -> None:
+    @on(SideDrawerView.SessionSelected)
+    def on_drawer_session_selected(self, message: SideDrawerView.SessionSelected) -> None:
         self.query_one(SideDrawerView).close()
-        self.action_open_chat_history()
+        selected_id = message.session_id
+        if selected_id != self.current_session.id or not self._session_is_persisted:
+            sessions = {s.id: s for s in self.db.list_sessions()}
+            if selected_id in sessions:
+                self.current_session = sessions[selected_id]
+                self._session_is_persisted = True
+                self._load_active_session_messages()
+                self.notify(f"Cargado: {self.current_session.title}", title="Chat Cambiado", severity="information")
+        self.query_one("#message", Input).focus()
+
+    @on(ChatHistoryItem.RightClicked)
+    def on_history_item_right_clicked(self, message: ChatHistoryItem.RightClicked) -> None:
+        """Shows minimal context box adjacent to the right-clicked conversation."""
+        session = message.session
+        anchor_x = message.screen_x
+        anchor_y = message.screen_y
+
+        def _on_context_result(action: str | None) -> None:
+            drawer = self.query_one(SideDrawerView)
+            if action == "toggle_pin":
+                ok, msg = self.db.toggle_pin_session(session.id)
+                self.notify(msg, title="Fijar chat", severity="information" if ok else "warning")
+                drawer.refresh_history(self.current_session.id)
+            elif action == "delete":
+                self.db.delete_session(session.id)
+                self.notify(f"Conversación '{session.title}' eliminada", title="Eliminado", severity="information")
+                if self.current_session.id == session.id:
+                    self._start_new_unpersisted_chat()
+                else:
+                    drawer.refresh_history(self.current_session.id)
+
+        self.push_screen(
+            PinContextMenuModal(session, anchor_x=anchor_x, anchor_y=anchor_y),
+            _on_context_result,
+        )
 
     @on(SideDrawerView.OpenSettings)
     def on_drawer_open_settings(self) -> None:
@@ -217,31 +237,9 @@ class Myapp(App):
         self._session_is_persisted = False
         chat = self.query_one(ChatView)
         chat.clear_messages()
+        drawer = self.query_one(SideDrawerView)
+        drawer.refresh_history(self.current_session.id)
         self.notify("Nuevo chat listo. Se guardará al enviar tu primer mensaje.", title="Nuevo Chat", severity="information")
-        self.query_one("#message", Input).focus()
-
-    def action_open_chat_history(self) -> None:
-        self.push_screen(
-            ChatHistoryModal(current_session_id=self.current_session.id),
-            self._on_chat_history_result,
-        )
-
-    def _on_chat_history_result(self, selected_session_id: str | None) -> None:
-        if not selected_session_id:
-            self.query_one("#message", Input).focus()
-            return
-
-        if selected_session_id == "__NEW_CHAT__":
-            self._start_new_unpersisted_chat()
-            return
-
-        if selected_session_id != self.current_session.id or not self._session_is_persisted:
-            sessions = {s.id: s for s in self.db.list_sessions()}
-            if selected_session_id in sessions:
-                self.current_session = sessions[selected_session_id]
-                self._session_is_persisted = True
-                self._load_active_session_messages()
-                self.notify(f"Cargado: {self.current_session.title}", title="Chat Cambiado", severity="information")
         self.query_one("#message", Input).focus()
 
     def action_open_settings(self) -> None:
@@ -301,19 +299,12 @@ class Myapp(App):
 
     def change_vault_path(self, new_path: str) -> None:
         abs_path = os.path.abspath(os.path.expanduser(new_path))
-
-        # 1. Guardar persistentemente en la base de datos SQLite
         self.db.set_vault_path(abs_path)
-
-        # 2. Actualizar VectorialTransfer y Chain
         VectorialTransfer.set_obsidian_path(abs_path)
         self.chain.use_vault(abs_path)
-
-        # 3. Actualizar el FileManagerView
         file_manager = self.query_one(FileManagerView)
         file_manager.update_vault_root(abs_path)
 
-        # Notificación y mensaje de confirmación
         self.notify(f"Bóveda cambiada a: {abs_path}", title="Bóveda actualizada", severity="information")
         chat = self.query_one("#chat", ChatView)
         chat.add_assistant_message(f"📁 Directorio de fuentes actualizado a: [bold]{abs_path}[/bold]")
@@ -328,7 +319,6 @@ class Myapp(App):
         if not entrada:
             return
 
-        # Comando rápido de cambio de directorio: /vault [ruta], /dir [ruta] o /path [ruta]
         lower = entrada.lower()
         if lower.startswith(("/vault", "/dir", "/path")):
             parts = entrada.split(maxsplit=1)
@@ -344,7 +334,6 @@ class Myapp(App):
                 self.action_open_change_vault()
             return
 
-        # Si es un nuevo chat y aún no está guardado en SQLite, guardarlo ahora con su primer mensaje
         if not self._session_is_persisted:
             words = entrada.split()
             first_words = " ".join(words[:5])
@@ -356,11 +345,12 @@ class Myapp(App):
             )
             self.current_session = persisted_sess
             self._session_is_persisted = True
+            drawer = self.query_one(SideDrawerView)
+            drawer.refresh_history(self.current_session.id)
 
         barra = self.query_one(SearchBarView)
         barra.send(entrada)
 
-        # Persistir mensaje de usuario en SQLite con marca de tiempo actual
         now_iso = datetime.now(timezone.utc).isoformat()
         self.db.add_message(
             session_id=self.current_session.id,
@@ -374,7 +364,6 @@ class Myapp(App):
     def _ask(self, text: str) -> None:
         self._set_busy(True)
         chat = self.query_one("#chat", ChatView)
-        # Montar tarjeta de asistente vacía para streaming en vivo con modelo y hora
         chat.start_streaming_assistant_message(
             model_name=self.current_session.model,
         )
@@ -388,7 +377,6 @@ class Myapp(App):
         try:
             for chunk in self.chain.stream_search(question):
                 full_text.append(chunk)
-                # Enviar token al hilo de Textual en tiempo real
                 self.call_from_thread(self._on_chunk_received, chunk)
             elapsed = time.perf_counter() - t0
             return "".join(full_text)
@@ -426,6 +414,8 @@ class Myapp(App):
                 content=answer,
                 created_at=now_iso,
             )
+            drawer = self.query_one(SideDrawerView)
+            drawer.refresh_history(self.current_session.id)
             self.query_one("#message", Input).focus()
         elif worker.state in (WorkerState.ERROR, WorkerState.CANCELLED):
             self._set_busy(False)

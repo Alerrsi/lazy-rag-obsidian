@@ -26,6 +26,15 @@
   - [x] Cuando el usuario escriba un mensaje se debe quitar ese mensaje de bienvenida
   - [x] Al abrir la aplicación tambien se debe mostrar el mensaje
   - [x] El mensaje al estar en otro tamaño la ventana deber redimensionarse y adaptarse para que siempre se vea bien
+  - [x] Mostrar historial de chats directamente en el panel lateral:
+    - [x] Cada chat con su nombre y hora de ultimo mensaje
+    - [x] quitar opción de boton de historial solo directamente
+    - [x] los botones de el lateral deben ser minimalistas y sin sombra muy pronunciada
+    - [x] Opción de fijar maximo de 3 chats
+      - [x] se debe hacer click derecho y la opción se debe llamar "Fijar conversación"
+      - [x] No se deben mostrar chats no reales y sin mensajes 
+      - [x] Si no hay chats fijados no pongas nada hasta que se fijen
+      - [x] Se deben mostrar los chat fijados con un icono no emoji, el emoji tiene que ser adecuado para los estandares de la estetica actual de la aplicación
 - [ ] en el menu de archivos el usuario debe poder seleccionar que archivos puede usar para que el agente le responda:
   - EL usuario debe ver un marcador de ticket al costado derecho de cada archivo.md 
   - al hacer click el arhcivo se usara como fuente de información unica

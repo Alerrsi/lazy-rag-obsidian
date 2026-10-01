@@ -3,7 +3,7 @@
 Uses a normalized SQLite database completely separate from the vectorstore/Chroma.
 Provides clean, typed, thread-safe access to:
   - Key-value configuration settings (e.g. current vault directory, active session).
-  - Normalized chat conversations (with model metadata) and messages (with timestamp/hora).
+  - Normalized chat conversations (with model metadata, is_pinned flag) and messages (with timestamp/hora).
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ class ChatSession:
     model: str
     created_at: str
     updated_at: str
+    is_pinned: bool = False
 
 
 class AppDatabase:
@@ -88,25 +89,30 @@ class AppDatabase:
             )
 
             # 2. Chat sessions table (1:N relationship with messages)
-            # Normalizada con id, nombre/title, modelo usado, created_at, updated_at
+            # Normalizada con id, nombre/title, modelo usado, is_pinned, created_at, updated_at
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
                     model TEXT NOT NULL DEFAULT 'gemini-2.5-flash',
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
             )
 
-            # Migration: Ensure model column exists if table was created previously without it
+            # Migrations: Ensure model and is_pinned columns exist
             cursor = conn.execute("PRAGMA table_info(chat_sessions);")
             columns = [col["name"] for col in cursor.fetchall()]
             if "model" not in columns:
                 conn.execute(
                     f"ALTER TABLE chat_sessions ADD COLUMN model TEXT NOT NULL DEFAULT '{DEFAULT_MODEL}';"
+                )
+            if "is_pinned" not in columns:
+                conn.execute(
+                    "ALTER TABLE chat_sessions ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;"
                 )
 
             # 3. Chat messages table: normalizada con id, session_id, sender, content, thought, created_at (hora)
@@ -129,7 +135,7 @@ class AppDatabase:
                 "CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id, created_at);"
             )
             conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON chat_sessions(updated_at DESC);"
+                "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON chat_sessions(is_pinned DESC, updated_at DESC);"
             )
 
             # Ensure default settings are populated
@@ -181,10 +187,17 @@ class AppDatabase:
     # --- Chat Sessions & Messages API ---------------------------------------
 
     def get_most_recent_session(self) -> ChatSession | None:
-        """Returns the most recent persisted session, or None if no sessions exist."""
+        """Returns the most recent persisted session with at least one message, or None."""
         with _LOCK, self._get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, title, model, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT 1;"
+                """
+                SELECT s.id, s.title, s.model, s.is_pinned, s.created_at, s.updated_at
+                FROM chat_sessions s
+                INNER JOIN chat_messages m ON s.id = m.session_id
+                GROUP BY s.id
+                ORDER BY s.is_pinned DESC, s.updated_at DESC
+                LIMIT 1;
+                """
             )
             row = cursor.fetchone()
             if row is not None:
@@ -192,6 +205,7 @@ class AppDatabase:
                     id=row["id"],
                     title=row["title"],
                     model=row["model"],
+                    is_pinned=bool(row["is_pinned"]),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -209,6 +223,7 @@ class AppDatabase:
         title: str = "Nueva Conversación",
         model: str = DEFAULT_MODEL,
         session_id: str | None = None,
+        is_pinned: bool = False,
     ) -> ChatSession:
         """Explicitly saves a new chat session to SQLite with id, title, and model."""
         sess_id = session_id or str(uuid.uuid4())
@@ -216,17 +231,25 @@ class AppDatabase:
         with _LOCK, self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO chat_sessions (id, title, model, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO chat_sessions (id, title, model, is_pinned, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title = excluded.title,
                     model = excluded.model,
+                    is_pinned = excluded.is_pinned,
                     updated_at = excluded.updated_at;
                 """,
-                (sess_id, title, model, now, now),
+                (sess_id, title, model, 1 if is_pinned else 0, now, now),
             )
             conn.commit()
-        return ChatSession(id=sess_id, title=title, model=model, created_at=now, updated_at=now)
+        return ChatSession(
+            id=sess_id,
+            title=title,
+            model=model,
+            is_pinned=is_pinned,
+            created_at=now,
+            updated_at=now,
+        )
 
     def session_exists(self, session_id: str) -> bool:
         """Checks if a session is currently stored in SQLite."""
@@ -234,21 +257,68 @@ class AppDatabase:
             cursor = conn.execute("SELECT 1 FROM chat_sessions WHERE id = ?;", (session_id,))
             return cursor.fetchone() is not None
 
-    def list_sessions(self) -> list[ChatSession]:
+    def list_sessions(self, require_messages: bool = True) -> list[ChatSession]:
+        """Lists chat sessions ordered with pinned chats first, then newest updated.
+
+        By default, excludes ghost sessions without any messages.
+        """
+        query = """
+            SELECT s.id, s.title, s.model, s.is_pinned, s.created_at, s.updated_at
+            FROM chat_sessions s
+        """
+        if require_messages:
+            query += """
+            INNER JOIN chat_messages m ON s.id = m.session_id
+            GROUP BY s.id
+            """
+        query += " ORDER BY s.is_pinned DESC, s.updated_at DESC;"
+
         with _LOCK, self._get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT id, title, model, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC;"
-            )
+            cursor = conn.execute(query)
             return [
                 ChatSession(
                     id=row["id"],
                     title=row["title"],
                     model=row["model"],
+                    is_pinned=bool(row["is_pinned"]),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
                 for row in cursor.fetchall()
             ]
+
+    def count_pinned_sessions(self) -> int:
+        """Returns the number of currently pinned sessions."""
+        with _LOCK, self._get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM chat_sessions WHERE is_pinned = 1;")
+            row = cursor.fetchone()
+            return int(row[0]) if row else 0
+
+    def toggle_pin_session(self, session_id: str) -> tuple[bool, str]:
+        """Toggles the pinned status of a session. Enforces a maximum of 3 pinned chats.
+
+        Returns (success, message).
+        """
+        with _LOCK, self._get_connection() as conn:
+            cursor = conn.execute("SELECT is_pinned FROM chat_sessions WHERE id = ?;", (session_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False, "Conversación no encontrada"
+
+            current_status = bool(row["is_pinned"])
+            if not current_status:
+                pinned_count = self.count_pinned_sessions()
+                if pinned_count >= 3:
+                    return False, "Máximo 3 conversaciones fijadas permitidas."
+                new_status = 1
+                msg = "Conversación fijada"
+            else:
+                new_status = 0
+                msg = "Conversación desfijada"
+
+            conn.execute("UPDATE chat_sessions SET is_pinned = ? WHERE id = ?;", (new_status, session_id))
+            conn.commit()
+            return True, msg
 
     def add_message(
         self,

@@ -30,8 +30,8 @@ flowchart TD
         Chat["ChatView (Markdown, Cards, Streaming)"]
         FileManager["FileManagerView (DirectoryTree)"]
         SearchBar["SearchBarView (Input, Suggestions)"]
-        Drawer["SideDrawerView (Menú Lateral)"]
-        Modals["VaultModal / NotePreviewModal / ChatHistoryModal / SettingsModal"]
+        Drawer["SideDrawerView (Menú Lateral con Historial Directo y Pinning)"]
+        Modals["VaultModal / NotePreviewModal / SettingsModal / PinContextMenuModal"]
         Workers["Workers (@work thread=True)"]
     end
 
@@ -43,7 +43,7 @@ flowchart TD
     end
 
     subgraph DB ["Capa de Persistencia"]
-        SQLite[("AppDatabase (app_data.sqlite - settings/chats)")]
+        SQLite[("AppDatabase (app_data.sqlite - settings/chats/pinning)")]
         Chroma[("ChromaDB (chroma.sqlite3)")]
         Manifest["index_manifest.json (mtime / size)"]
         Vault[("Bóveda Obsidian (*.md)")]
@@ -70,8 +70,8 @@ lazy-rag-obsidian/
 ├── requirements.txt        # Dependencias de Python fijadas
 └── App/
     ├── DB/
-    │   ├── app_data.sqlite # Base SQLite relacional (configuraciones e historial de chat)
-    │   ├── storage.py      # Capa de acceso a datos relacional SQLite
+    │   ├── app_data.sqlite # Base SQLite relacional (configuraciones e historial de chat normalizado con is_pinned)
+    │   ├── storage.py      # Capa de acceso a datos relacional SQLite (sesiones, fijado máx 3, mensajes)
     │   └── Chroma/         # Almacenamiento vectorial persistente y manifiestos
     ├── RAG/
     │   ├── Chain.py        # Orquestación RAG, streaming y fast-path de saludos
@@ -81,7 +81,7 @@ lazy-rag-obsidian/
         ├── app.py          # Clase principal de Textual (Myapp), layout y streaming workers
         ├── theme.py        # Definición de paleta de colores y temas
         ├── CSS/            # Hojas de estilo Textual (TCSS) desacopladas
-        └── components/     # Widgets modulares (chat, drawer, filemanager, history, prompt, settings)
+        └── components/     # Widgets modulares (chat, drawer con historial directo y fijado, filemanager, prompt, settings)
 ```
 
 ---
@@ -119,7 +119,7 @@ No todas las entradas del usuario requieren búsqueda vectorial o cálculo de em
 - **Custom Messages**: Para comunicar acciones entre componentes, define eventos que hereden de `textual.message.Message`.
 
 ### 3.5. Estilos con TCSS Desacoplado
-- **Cero estilos inline en Python**: Toda propiedad visual debe vivir en archivos `.tcss` en `App/UI/CSS/`.
+- **Cero estilos inline en Python**: Toda propiedad visual debe vivir en archivos `.tcss` en `App/UI/CSS/` o constantes `DEFAULT_CSS` bien estructuradas sin sombras pesadas ni propiedades no estándar.
 - **Diseño Responsivo con Breakpoints Fluidos**: Usar unidades fraccionarias (`1fr`) y alternar clases en `#main` según el tamaño de la terminal.
 - **Tematización centralizada**: Utilizar los tokens semánticos definidos en `App/UI/theme.py`.
 
@@ -165,7 +165,7 @@ Directrices de optimización de rendimiento:
 | Dimensión | Enfoque Actual | Guía de Escalabilidad Futura |
 | :--- | :--- | :--- |
 | **Streaming de Respuestas** | **Implementado**: streaming token a token vía `chain.stream` y `call_from_thread` en la tarjeta Markdown activa. | Optimizar re-renders en Markdown para streams de longitud extrema. |
-| **Persistencia de Conversaciones** | **Implementado**: SQLite relacional (`app_data.sqlite`) con sesiones y mensajes normalizados. | Búsqueda全文 (FTS5) sobre el historial de chats pasados. |
+| **Persistencia e Historial en Menú Lateral** | **Implementado**: SQLite relacional (`app_data.sqlite`) con sesiones, mensajes normalizados, fijado de hasta 3 chats y visualización directa en el drawer. | Búsqueda全文 (FTS5) sobre el historial de chats pasados. |
 | **Bóvedas grandes (>10.000 notas)** | Manifiesto local JSON con `mtime` | Migrar manifiesto a SQLite; indexación en chunks paralelos con hilos o procesos auxiliares. |
 | **Proveedores LLM** | Gemini 2.5 Flash con streaming | Abstraer proveedor en protocolo común (`LLMProvider`) para alternar con Ollama local u otros proveedores. |
 
